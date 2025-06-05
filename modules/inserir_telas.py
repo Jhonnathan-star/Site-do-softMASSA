@@ -1,5 +1,5 @@
 import streamlit as st
-from modules.processa_turno import processa_turno_front
+
 def inserir_telas(conn):
     st.subheader("📅 Inserir dados de telas")
 
@@ -24,9 +24,6 @@ def inserir_telas(conn):
         telas_fina_tarde = 0
         st.info("É domingo. Dados da tarde serão inseridos como 0.")
 
-    # Pergunta se deseja adicionar dados de horários
-    opcao = st.radio("Deseja inserir também os dados na tabela 'horários'?", ["Sim", "Não"], horizontal=True)
-
     # Botão de inserção
     if st.button("Inserir dados de telas"):
         try:
@@ -49,34 +46,8 @@ def inserir_telas(conn):
             cursor.execute(sql, valores)
             conn.commit()
 
-            cursor.execute("SELECT LAST_INSERT_ID()")
-            id_telas = cursor.fetchone()[0]
-
             st.success(f"✅ Dados inseridos com sucesso para {semana_pt} ({data.strftime('%Y-%m-%d')})")
-
-            # Salva no session_state
-            st.session_state.show_horarios = (opcao == "Sim")
-            st.session_state.id_telas = id_telas
-            st.session_state.valores_telas = {
-                "telas_grossa_manha": telas_grossa_manha,
-                "telas_grossa_tarde": telas_grossa_tarde,
-                "telas_fina_manha": telas_fina_manha,
-                "telas_fina_tarde": telas_fina_tarde,
-                "domingo_ou_feriado": domingo_ou_feriado
-            }
 
         except Exception as e:
             st.error(f"❌ Erro ao inserir dados: {e}")
 
-    # Mostra a tela de horários se necessário
-    if st.session_state.get("show_horarios", False):
-        st.info("📌 Insira agora os dados de horários para cada turno:")
-        processa_turno_front(
-            conn,
-            st.session_state.id_telas,
-            st.session_state.valores_telas["telas_grossa_manha"],
-            st.session_state.valores_telas["telas_grossa_tarde"],
-            st.session_state.valores_telas["telas_fina_manha"],
-            st.session_state.valores_telas["telas_fina_tarde"],
-            st.session_state.valores_telas["domingo_ou_feriado"]
-        )
