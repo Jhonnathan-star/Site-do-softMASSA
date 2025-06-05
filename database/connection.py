@@ -7,7 +7,7 @@ def conectar():
             host='turntable.proxy.rlwy.net',
             port=43507,
             user='root',
-            password='WNApvlyvcMKaUgEyhwrUZWuAHMDlhmAT',
+            password='xxxxxxxxx',
             database='railway'
         )
         if conn.is_connected():
