@@ -5,67 +5,79 @@ from modules.processa_turno import inserir_horarios_separados_front, buscar_hist
 from modules.predicao import criar_predicao_semana
 from modules.ver_alterar import ver_e_alterar_telas_por_data
 from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
-from pages.login import login_usuario, cadastrar_usuario  # IMPORTAÇÃO AQUI
+from pages.login import login_usuario, cadastrar_usuario
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Padaria", layout="centered")
 
-# Inicializa estado de login
+# Constantes
+SUPERUSUARIO = "Jhonnathan"
+
+# Inicializa estados
 if "logado" not in st.session_state:
     st.session_state.logado = False
 if "usuario" not in st.session_state:
     st.session_state.usuario = None
-
-# Login e Cadastro
-if not st.session_state.logado:
-    st.title("🔐 Acesso ao softMASSA")
-    aba = st.sidebar.selectbox("Ação", ["Login", "Cadastro"])
-    conn = conectar()
-    if conn:
-        if aba == "Login":
-            login_usuario(conn)
-        else:
-            cadastrar_usuario(conn)
-        conn.close()
-    else:
-        st.error("Erro ao conectar ao banco de dados.")
-    st.stop()  # Para execução aqui se não estiver logado
-
-# Se logado, segue para o menu principal
 if "pagina" not in st.session_state:
     st.session_state.pagina = "menu"
+if "rerun_flag" not in st.session_state:
+    st.session_state.rerun_flag = False
+if "logout_rerun_flag" not in st.session_state:
+    st.session_state.logout_rerun_flag = False
 
-# Menu principal e navegação lateral
-if st.session_state.pagina == "menu":
-    st.title("🍞 Sistema da softMASSA")
-    st.success(f"Bem-vindo, {st.session_state.usuario}!")
-    opcao = st.sidebar.selectbox("Selecione uma opção:", [
-        "Inserir dados de telas",
-        "Inserir somente horários",
-        "Criar predição da semana",
-        "Ver/Alterar dados das telas",
-        "Buscar relatório por data",
-        "Previsão automática de pedidos",
-        "Previsão manual de pedidos",
-        "Sair"
-    ])
+# Conecta ao banco
+conn = conectar()
+if conn is None:
+    st.error("Erro ao conectar ao banco de dados.")
+    st.stop()
 
-    if st.button("Selecionar"):
-        st.session_state.pagina = opcao
+# Exibe tela de login se não estiver logado
+if not st.session_state.logado:
+    st.title("🔐 Acesso ao softMASSA")
+    login_usuario(conn)
+    conn.close()
+    st.stop()
 
-# Páginas
+# Usuário está logado — menu principal
+st.title("🍞 Sistema da softMASSA")
+st.success(f"Bem-vindo, {st.session_state.usuario}!")
+
+# Menu lateral com opções
+opcoes = [
+    "Inserir dados de telas",
+    "Inserir somente horários",
+    "Criar predição da semana",
+    "Ver/Alterar dados das telas",
+    "Buscar relatório por data",
+    "Previsão automática de pedidos",
+    "Previsão manual de pedidos",
+]
+
+# Superusuário vê a opção de cadastrar novo usuário
+if st.session_state.usuario == SUPERUSUARIO:
+    opcoes.append("Cadastrar novo usuário")
+
+opcoes.append("Sair")
+
+# Navegação do menu
+opcao = st.sidebar.selectbox("Selecione uma opção:", opcoes)
+if st.button("Selecionar"):
+    st.session_state.pagina = opcao
+
+# Função genérica para executar páginas
 def executar_pagina(funcao):
     conn = conectar()
     if not conn:
         st.error("❌ Não foi possível conectar ao banco de dados.")
-    else:
-        try:
-            funcao(conn)
-        finally:
-            conn.close()
+        return
+    try:
+        funcao(conn)
+    finally:
+        conn.close()
     if st.button("🔙 Voltar ao menu"):
         st.session_state.pagina = "menu"
 
+# Execução de páginas conforme a opção selecionada
 if st.session_state.pagina == "Inserir dados de telas":
     executar_pagina(inserir_telas)
 
@@ -87,18 +99,13 @@ elif st.session_state.pagina == "Previsão automática de pedidos":
 elif st.session_state.pagina == "Previsão manual de pedidos":
     executar_pagina(inserir_pedidos_manual)
 
+elif st.session_state.pagina == "Cadastrar novo usuário":
+    if st.session_state.usuario == SUPERUSUARIO:
+        executar_pagina(cadastrar_usuario)
+    else:
+        st.error("Acesso negado.")
+
 elif st.session_state.pagina == "Sair":
     st.session_state.clear()
     st.write("👋 Você saiu do sistema. Feche a aba do navegador para encerrar a sessão.")
     st.stop()
-
-
-
-
-# Aqui você pode adicionar os outros blocos elif para outras opções, como:
-# elif st.session_state.pagina == "Ver/Alterar dados das telas":
-#    ...
-# elif st.session_state.pagina == "Buscar relatório por data":
-#    ...
-# etc.
-
