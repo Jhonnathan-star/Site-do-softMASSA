@@ -4,12 +4,14 @@ import os
 from dotenv import load_dotenv
 from database.connection import conectar
 
-# Carregar variáveis do .env
+# Carrega variáveis locais (.env) se estiver rodando localmente
 load_dotenv()
 
-SUPERUSUARIO = os.getenv("SUPERUSUARIO")
-SENHA_SUPERUSUARIO_HASH = os.getenv("SENHA_SUPERUSUARIO_HASH")
+# Usa st.secrets (para nuvem) e os.getenv (para local)
+SUPERUSUARIO = st.secrets.get("SUPERUSUARIO", os.getenv("SUPERUSUARIO"))
+SENHA_SUPERUSUARIO_HASH = st.secrets.get("SENHA_SUPERUSUARIO_HASH", os.getenv("SENHA_SUPERUSUARIO_HASH"))
 
+# Converte hash para bytes se existir
 if SENHA_SUPERUSUARIO_HASH:
     SENHA_SUPERUSUARIO_HASH = SENHA_SUPERUSUARIO_HASH.encode()
 
