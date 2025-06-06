@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 from database.connection import conectar
 from modules.inserir_telas import inserir_telas
@@ -11,7 +12,7 @@ from pages.login import login_usuario, cadastrar_usuario
 st.set_page_config(page_title="Sistema de Padaria", layout="centered")
 
 # Constantes
-SUPERUSUARIO = "Jhonnathan"
+SUPERUSUARIO = st.secrets.get("SUPERUSUARIO")
 
 # Inicializa estados
 if "logado" not in st.session_state:
