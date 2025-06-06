@@ -1,17 +1,11 @@
 import streamlit as st
 import bcrypt
-import os
-from dotenv import load_dotenv
 from database.connection import conectar
 
-# Carrega variáveis locais (.env) se estiver rodando localmente
-load_dotenv()
+# Pegando variáveis dos segredos do Streamlit
+SUPERUSUARIO = st.secrets.get("SUPERUSUARIO")
+SENHA_SUPERUSUARIO_HASH = st.secrets.get("SENHA_SUPERUSUARIO_HASH")
 
-# Usa st.secrets (para nuvem) e os.getenv (para local)
-SUPERUSUARIO = st.secrets.get("SUPERUSUARIO", os.getenv("SUPERUSUARIO"))
-SENHA_SUPERUSUARIO_HASH = st.secrets.get("SENHA_SUPERUSUARIO_HASH", os.getenv("SENHA_SUPERUSUARIO_HASH"))
-
-# Converte hash para bytes se existir
 if SENHA_SUPERUSUARIO_HASH:
     SENHA_SUPERUSUARIO_HASH = SENHA_SUPERUSUARIO_HASH.encode()
 
@@ -34,17 +28,17 @@ def login_usuario(conn):
     senha = st.text_input("Senha", type="password")
 
     if st.button("Entrar"):
-        cursor = conn.cursor()
-        cursor.execute("SELECT senha FROM usuarios WHERE usuario = %s", (usuario,))
-        resultado = cursor.fetchone()
-        cursor.close()
-
         if verificar_superusuario(usuario, senha):
             st.success(f"Bem-vindo, {usuario} (Superusuário)!")
             st.session_state['logado'] = True
             st.session_state['usuario'] = usuario
             st.session_state['rerun_flag'] = not st.session_state.get('rerun_flag', False)
             st.stop()
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT senha FROM usuarios WHERE usuario = %s", (usuario,))
+        resultado = cursor.fetchone()
+        cursor.close()
 
         if resultado:
             senha_hashed = resultado[0]
