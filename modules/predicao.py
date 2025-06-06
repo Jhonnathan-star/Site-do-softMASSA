@@ -14,8 +14,11 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 # Função para treinar o modelo
 def treinar_modelo(df, coluna, impacto_clima):
-    X = df[['dia_semana', impacto_clima]]
-    y = df[coluna]
+    # Filtra apenas as linhas onde a coluna de destino não é nula
+    df_filtrado = df[[coluna, 'dia_semana', impacto_clima]].dropna()
+
+    X = df_filtrado[['dia_semana', impacto_clima]]
+    y = df_filtrado[coluna]
 
     preprocessor = ColumnTransformer(transformers=[
         ('cat', OneHotEncoder(drop='first'), ['dia_semana']),
@@ -39,7 +42,6 @@ def treinar_modelo(df, coluna, impacto_clima):
 
     pipeline.fit(X, y)
     return pipeline
-
 
 # Função principal
 def criar_predicao_semana(conn):
