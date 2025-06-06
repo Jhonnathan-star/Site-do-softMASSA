@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 from database.connection import conectar
 from modules.inserir_telas import inserir_telas
@@ -6,7 +5,7 @@ from modules.processa_turno import inserir_horarios_separados_front, buscar_hist
 from modules.predicao import criar_predicao_semana
 from modules.ver_alterar import ver_e_alterar_telas_por_data
 from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
-from pages.login import login_usuario, cadastrar_usuario
+from modules.login import login_usuario, cadastrar_usuario
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Padaria", layout="centered")
@@ -21,10 +20,6 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = None
 if "pagina" not in st.session_state:
     st.session_state.pagina = "menu"
-if "rerun_flag" not in st.session_state:
-    st.session_state.rerun_flag = False
-if "logout_rerun_flag" not in st.session_state:
-    st.session_state.logout_rerun_flag = False
 
 # Conecta ao banco
 conn = conectar()
@@ -39,33 +34,31 @@ if not st.session_state.logado:
     conn.close()
     st.stop()
 
-# Usuário está logado — menu principal
+# Usuário logado — mostra menu
 st.title("🍞 Sistema da softMASSA")
 st.success(f"Bem-vindo, {st.session_state.usuario}!")
 
-# Menu lateral com opções
+# Menu lateral
 opcoes = [
+    "Menu Principal",
     "Inserir dados de telas",
     "Inserir somente horários",
     "Criar predição da semana",
     "Ver/Alterar dados das telas",
     "Buscar relatório por data",
     "Previsão automática de pedidos",
-    "Previsão manual de pedidos",
+    "Previsão manual de pedidos"
 ]
 
-# Superusuário vê a opção de cadastrar novo usuário
+# Superusuário pode cadastrar
 if st.session_state.usuario == SUPERUSUARIO:
     opcoes.append("Cadastrar novo usuário")
 
-opcoes.append("Sair")
+# Navegação
+st.sidebar.header("📋 Menu")
+st.session_state.pagina = st.sidebar.selectbox("Escolha uma opção:", opcoes)
 
-# Navegação do menu
-opcao = st.sidebar.selectbox("Selecione uma opção:", opcoes)
-if st.button("Selecionar"):
-    st.session_state.pagina = opcao
-
-# Função genérica para executar páginas
+# Função genérica
 def executar_pagina(funcao):
     conn = conectar()
     if not conn:
@@ -75,11 +68,31 @@ def executar_pagina(funcao):
         funcao(conn)
     finally:
         conn.close()
+    st.markdown("---")
     if st.button("🔙 Voltar ao menu"):
-        st.session_state.pagina = "menu"
+        st.session_state.pagina = "Menu Principal"
+        st.rerun()
 
-# Execução de páginas conforme a opção selecionada
-if st.session_state.pagina == "Inserir dados de telas":
+if st.session_state.pagina == "Menu Principal":
+    st.info("Use o menu lateral para navegar pelas funcionalidades.")
+
+    # Botão de logout no menu principal
+    col1, col2 = st.columns([7, 1])
+    with col2:
+        if st.button("🚪 Sair"):
+            # Limpa informações da sessão
+            st.session_state.logado = False
+            st.session_state.usuario = None
+            st.session_state.pagina = "menu"
+            st.rerun()
+
+# Se não estiver logado, exibe a tela de login
+if not st.session_state.get("logado", False):
+    login_usuario(conn)
+    st.stop()
+
+
+elif st.session_state.pagina == "Inserir dados de telas":
     executar_pagina(inserir_telas)
 
 elif st.session_state.pagina == "Inserir somente horários":
@@ -106,7 +119,3 @@ elif st.session_state.pagina == "Cadastrar novo usuário":
     else:
         st.error("Acesso negado.")
 
-elif st.session_state.pagina == "Sair":
-    st.session_state.clear()
-    st.write("👋 Você saiu do sistema. Feche a aba do navegador para encerrar a sessão.")
-    st.stop()
