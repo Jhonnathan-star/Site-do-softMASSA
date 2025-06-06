@@ -32,8 +32,7 @@ def login_usuario(conn):
             st.success(f"Bem-vindo, {usuario} (Superusuário)!")
             st.session_state['logado'] = True
             st.session_state['usuario'] = usuario
-            st.session_state['rerun_flag'] = not st.session_state.get('rerun_flag', False)
-            st.stop()
+            st.rerun()  # Redireciona imediatamente após login
 
         cursor = conn.cursor()
         cursor.execute("SELECT senha FROM usuarios WHERE usuario = %s", (usuario,))
@@ -46,12 +45,12 @@ def login_usuario(conn):
                 st.success(f"Bem-vindo, {usuario}!")
                 st.session_state['logado'] = True
                 st.session_state['usuario'] = usuario
-                st.session_state['rerun_flag'] = not st.session_state.get('rerun_flag', False)
-                st.stop()
+                st.rerun()  # Redireciona imediatamente após login
             else:
                 st.error("Senha incorreta.")
         else:
             st.error("Usuário não encontrado.")
+
 
 # Cadastro (visível só para superusuário)
 def cadastrar_usuario(conn):
