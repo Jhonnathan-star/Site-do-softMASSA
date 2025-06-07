@@ -6,20 +6,21 @@ from modules.predicao import criar_predicao_semana
 from modules.ver_alterar import ver_e_alterar_telas_por_data
 from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
 from modules.login import login_usuario, cadastrar_usuario
+from modules.ver_conta import ver_conta_funcionario  # ✅ NOVO IMPORT
 
 # Configuração da página
-st.set_page_config(page_title="Sistema de Padaria", layout="centered")
+st.set_page_config(page_title="softMASSA", layout="centered")
 
 # Constantes
 SUPERUSUARIO = st.secrets.get("SUPERUSUARIO")
 
-# Inicializa estados
+# Inicializa estados da sessão
 if "logado" not in st.session_state:
     st.session_state.logado = False
 if "usuario" not in st.session_state:
     st.session_state.usuario = None
 if "pagina" not in st.session_state:
-    st.session_state.pagina = "menu"
+    st.session_state.pagina = "Menu Principal"
 
 # Conecta ao banco
 conn = conectar()
@@ -27,7 +28,7 @@ if conn is None:
     st.error("Erro ao conectar ao banco de dados.")
     st.stop()
 
-# Exibe tela de login se não estiver logado
+# Se não estiver logado, exibe tela de login
 if not st.session_state.logado:
     st.title("🔐 Acesso ao softMASSA")
     login_usuario(conn)
@@ -40,25 +41,28 @@ st.success(f"Bem-vindo, {st.session_state.usuario}!")
 
 # Menu lateral
 opcoes = [
-    "Menu Principal",
+    "Home",
     "Inserir dados de telas",
     "Inserir somente horários",
-    "Criar predição da semana",
     "Ver/Alterar dados das telas",
     "Buscar relatório por data",
-    "Previsão automática de pedidos",
-    "Previsão manual de pedidos"
+    "Ver Conta",  # ✅ NOVA OPÇÃO
 ]
 
-# Superusuário pode cadastrar
-if st.session_state.usuario == SUPERUSUARIO:
-    opcoes.append("Cadastrar novo usuário")
+# Adiciona opções exclusivas do superusuário
+if st.session_state.get("superusuario", False):
+    opcoes.extend([
+        "Criar predição da semana",
+        "Previsão automática de pedidos",
+        "Previsão manual de pedidos",
+        "Cadastrar novo usuário"
+    ])
 
-# Navegação
+# Seleção do menu
 st.sidebar.header("📋 Menu")
 st.session_state.pagina = st.sidebar.selectbox("Escolha uma opção:", opcoes)
 
-# Função genérica
+# Função para execução das páginas com conexão
 def executar_pagina(funcao):
     conn = conectar()
     if not conn:
@@ -68,44 +72,38 @@ def executar_pagina(funcao):
         funcao(conn)
     finally:
         conn.close()
-    st.markdown("---")
-    if st.button("🔙 Voltar ao menu"):
-        st.session_state.pagina = "Menu Principal"
-        st.rerun()
 
-if st.session_state.pagina == "Menu Principal":
+# Tela Home
+if st.session_state.pagina == "Home":
     st.info("Use o menu lateral para navegar pelas funcionalidades.")
 
-    # Botão de logout no menu principal
+    # Botão de logout no menu Home
     col1, col2 = st.columns([7, 1])
     with col2:
         if st.button("🚪 Sair"):
-            # Limpa informações da sessão
             st.session_state.logado = False
             st.session_state.usuario = None
-            st.session_state.pagina = "menu"
+            st.session_state.pagina = "Home"
             st.rerun()
 
-# Se não estiver logado, exibe a tela de login
-if not st.session_state.get("logado", False):
-    login_usuario(conn)
-    st.stop()
-
-
+# Chamada das funcionalidades
 elif st.session_state.pagina == "Inserir dados de telas":
     executar_pagina(inserir_telas)
 
 elif st.session_state.pagina == "Inserir somente horários":
     executar_pagina(inserir_horarios_separados_front)
 
-elif st.session_state.pagina == "Criar predição da semana":
-    executar_pagina(criar_predicao_semana)
-
 elif st.session_state.pagina == "Ver/Alterar dados das telas":
     executar_pagina(ver_e_alterar_telas_por_data)
 
 elif st.session_state.pagina == "Buscar relatório por data":
     executar_pagina(buscar_historico_por_data)
+
+elif st.session_state.pagina == "Ver Conta":  # ✅ NOVA CHAMADA
+    executar_pagina(ver_conta_funcionario)
+
+elif st.session_state.pagina == "Criar predição da semana":
+    executar_pagina(criar_predicao_semana)
 
 elif st.session_state.pagina == "Previsão automática de pedidos":
     executar_pagina(inserir_pedidos_automatizado)
@@ -118,4 +116,3 @@ elif st.session_state.pagina == "Cadastrar novo usuário":
         executar_pagina(cadastrar_usuario)
     else:
         st.error("Acesso negado.")
-

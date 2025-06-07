@@ -2,13 +2,6 @@ import streamlit as st
 import bcrypt
 from database.connection import conectar
 
-# Pegando variáveis dos segredos do Streamlit
-SUPERUSUARIO = st.secrets.get("SUPERUSUARIO")
-SENHA_SUPERUSUARIO_HASH = st.secrets.get("SENHA_SUPERUSUARIO_HASH")
-
-if SENHA_SUPERUSUARIO_HASH:
-    SENHA_SUPERUSUARIO_HASH = SENHA_SUPERUSUARIO_HASH.encode()
-
 # Utilitários
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
@@ -18,8 +11,25 @@ def check_password(password, hashed):
         hashed = hashed.encode()
     return bcrypt.checkpw(password.encode(), hashed)
 
-def verificar_superusuario(usuario, senha):
-    return usuario == SUPERUSUARIO and check_password(senha, SENHA_SUPERUSUARIO_HASH)
+def verificar_superusuario(conn, usuario, senha):
+    cursor = conn.cursor()
+    cursor.execute("SELECT senha FROM super_usuarios WHERE usuario = %s", (usuario,))
+    resultado = cursor.fetchone()
+    cursor.close()
+    if resultado:
+        senha_hash = resultado[0]
+        return check_password(senha, senha_hash)
+    return False
+
+def verificar_usuario_normal(conn, usuario, senha):
+    cursor = conn.cursor()
+    cursor.execute("SELECT senha FROM usuarios WHERE usuario = %s", (usuario,))
+    resultado = cursor.fetchone()
+    cursor.close()
+    if resultado:
+        senha_hash = resultado[0]
+        return check_password(senha, senha_hash)
+    return False
 
 # Função de login
 def login_usuario(conn):
@@ -28,29 +38,24 @@ def login_usuario(conn):
     senha = st.text_input("Senha", type="password")
 
     if st.button("Entrar"):
-        if verificar_superusuario(usuario, senha):
+        # Primeiro tenta login como superusuário
+        if verificar_superusuario(conn, usuario, senha):
             st.success(f"Bem-vindo, {usuario} (Superusuário)!")
             st.session_state['logado'] = True
             st.session_state['usuario'] = usuario
+            st.session_state['superusuario'] = True
             st.rerun()  # Redireciona imediatamente após login
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT senha FROM usuarios WHERE usuario = %s", (usuario,))
-        resultado = cursor.fetchone()
-        cursor.close()
+        # Se não for superusuário, tenta login como usuário normal
+        elif verificar_usuario_normal(conn, usuario, senha):
+            st.success(f"Bem-vindo, {usuario}!")
+            st.session_state['logado'] = True
+            st.session_state['usuario'] = usuario
+            st.session_state['superusuario'] = False
+            st.rerun()
 
-        if resultado:
-            senha_hashed = resultado[0]
-            if check_password(senha, senha_hashed):
-                st.success(f"Bem-vindo, {usuario}!")
-                st.session_state['logado'] = True
-                st.session_state['usuario'] = usuario
-                st.rerun()  # Redireciona imediatamente após login
-            else:
-                st.error("Senha incorreta.")
         else:
-            st.error("Usuário não encontrado.")
-
+            st.error("Usuário ou senha incorretos.")
 
 # Cadastro (visível só para superusuário)
 def cadastrar_usuario(conn):
@@ -78,4 +83,5 @@ def cadastrar_usuario(conn):
         cursor.execute("INSERT INTO usuarios (usuario, senha) VALUES (%s, %s)", (novo_usuario, senha_hashed))
         conn.commit()
         cursor.close()
-        st.success("Usuário cadastrado com sucesso!")
+
+        st.success("✅ Usuário cadastrado com sucesso!")
