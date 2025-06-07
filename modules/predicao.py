@@ -14,7 +14,6 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 # Função para treinar o modelo
 def treinar_modelo(df, coluna, impacto_clima):
-    # Filtra apenas as linhas onde a coluna de destino não é nula
     df_filtrado = df[[coluna, 'dia_semana', impacto_clima]].dropna()
 
     X = df_filtrado[['dia_semana', impacto_clima]]
@@ -48,6 +47,7 @@ def criar_predicao_semana(conn):
     if "previsoes" in st.session_state and st.session_state.previsoes is not None:
         df_previsoes = st.session_state.previsoes
     else:
+        # Coleta dados da tabela telas_vendidas3
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
             SELECT data, semana, telas_grossa_manha, telas_grossa_tarde, telas_fina_manha, telas_fina_tarde
@@ -61,7 +61,7 @@ def criar_predicao_semana(conn):
         df['data'] = pd.to_datetime(df['data'])
         df['dia_semana'] = df['data'].dt.day_name()
 
-        # Criar proxy de clima
+        # Criar colunas de impacto climático
         df['impacto_clima_grossa'] = df['telas_grossa_manha'] - df['telas_grossa_tarde']
         df['impacto_clima_fina'] = df['telas_fina_manha'] - df['telas_fina_tarde']
 
@@ -75,7 +75,24 @@ def criar_predicao_semana(conn):
                 'telas_fina_tarde': treinar_modelo(df, 'telas_fina_tarde', 'impacto_clima_fina'),
             }
 
-        ultima_data = df['data'].max()
+        # Obter a última data da tabela telas
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(data) FROM telas")
+        ultima_data_telas = cursor.fetchone()[0]
+        cursor.close()
+
+        if ultima_data_telas:
+            ultima_data_telas = pd.to_datetime(ultima_data_telas)
+
+        # Obter a última data da tabela telas_vendidas3
+        ultima_data_vendidas = df['data'].max()
+
+        # Usar a mais recente entre as duas
+        if ultima_data_telas and ultima_data_telas > ultima_data_vendidas:
+            ultima_data = ultima_data_telas
+        else:
+            ultima_data = ultima_data_vendidas
+
         previsoes = []
 
         for i in range(1, 8):

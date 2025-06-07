@@ -41,6 +41,7 @@ def ver_conta_funcionario(conn):
     nome_selecionado = st.selectbox("Selecione o funcionário:", nomes_usuarios)
     id_usuario_selecionado = next(u[0] for u in usuarios if u[1] == nome_selecionado)
 
+    # ------------------ CONTAS ------------------
     cursor.execute(
         "SELECT id, valor, descricao, data FROM conta_funcionarios WHERE id_usuario = %s ORDER BY data",
         (id_usuario_selecionado,)
@@ -130,6 +131,77 @@ def ver_conta_funcionario(conn):
             cursor.execute("DELETE FROM conta_funcionarios WHERE id_usuario = %s", (id_usuario_selecionado,))
             conn.commit()
             st.warning("❌ Todos os registros desta conta foram excluídos.")
+            st.rerun()
+
+    # ------------------ FALTAS ------------------
+    st.markdown("---")
+    st.subheader("📋 Faltas do Funcionário")
+
+    cursor.execute(
+        "SELECT id, data, motivo FROM faltas WHERE id_usuario = %s ORDER BY data DESC",
+        (id_usuario_selecionado,)
+    )
+    faltas = cursor.fetchall()
+
+    df_faltas = pd.DataFrame(faltas, columns=["ID", "Data", "Motivo"])
+
+    if not df_faltas.empty:
+        st.table(df_faltas.drop(columns=["ID"]))
+    else:
+        st.info("Nenhuma falta registrada.")
+
+    if superusuario:
+        st.markdown("### ➕ Registrar nova falta")
+        nova_data_falta = st.date_input("Data da falta", value=date.today(), key="falta_data")
+        novo_motivo = st.text_input("Motivo", key="falta_motivo")
+
+        if st.button("Registrar falta"):
+            if novo_motivo:
+                cursor.execute(
+                    "INSERT INTO faltas (id_usuario, data, motivo) VALUES (%s, %s, %s)",
+                    (id_usuario_selecionado, nova_data_falta, novo_motivo)
+                )
+                conn.commit()
+                st.success("✅ Falta registrada com sucesso!")
+                st.rerun()
+            else:
+                st.warning("⚠️ Motivo não pode estar em branco.")
+
+        if not df_faltas.empty:
+            st.markdown("### ✏️ Editar ou Excluir Falta")
+            opcoes_faltas = [
+                f"{row['Data']} - {row['Motivo']}" for _, row in df_faltas.iterrows()
+            ]
+            falta_selecionada = st.selectbox("Selecione uma falta para editar:", ["Nenhuma"] + opcoes_faltas)
+
+            if falta_selecionada != "Nenhuma":
+                idx = opcoes_faltas.index(falta_selecionada)
+                falta = df_faltas.iloc[idx]
+
+                nova_data_edicao = st.date_input("Nova data", value=pd.to_datetime(falta["Data"]).date(), key="editar_falta_data")
+                novo_motivo_edicao = st.text_input("Novo motivo", value=falta["Motivo"], key="editar_falta_motivo")
+
+                col1, col2 = st.columns(2)
+                if col1.button("Salvar alteração na falta"):
+                    cursor.execute(
+                        "UPDATE faltas SET data = %s, motivo = %s WHERE id = %s",
+                        (nova_data_edicao, novo_motivo_edicao, int(falta["ID"]))
+                    )
+                    conn.commit()
+                    st.success("✅ Falta atualizada com sucesso!")
+                    st.rerun()
+
+                if col2.button("🗑️ Excluir esta falta"):
+                    cursor.execute("DELETE FROM faltas WHERE id = %s", (int(falta["ID"]),))
+                    conn.commit()
+                    st.warning("❌ Falta excluída com sucesso!")
+                    st.rerun()
+
+        st.markdown("---")
+        if st.button("🧨 Excluir todas as faltas deste funcionário"):
+            cursor.execute("DELETE FROM faltas WHERE id_usuario = %s", (id_usuario_selecionado,))
+            conn.commit()
+            st.warning("❌ Todas as faltas deste funcionário foram excluídas.")
             st.rerun()
 
 def main():

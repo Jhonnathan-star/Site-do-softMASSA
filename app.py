@@ -42,7 +42,6 @@ st.success(f"Bem-vindo, {st.session_state.usuario}!")
 # Menu lateral
 opcoes = [
     "Home",
-    "Inserir dados de telas",
     "Inserir somente horários",
     "Ver/Alterar dados das telas",
     "Buscar relatório por data",
@@ -51,12 +50,14 @@ opcoes = [
 
 # Adiciona opções exclusivas do superusuário
 if st.session_state.get("superusuario", False):
+    opcoes.insert(1, "Inserir dados de telas")  # ✅ Agora é exclusivo
     opcoes.extend([
         "Criar predição da semana",
         "Previsão automática de pedidos",
         "Previsão manual de pedidos",
         "Cadastrar novo usuário"
     ])
+
 
 # Seleção do menu
 st.sidebar.header("📋 Menu")
@@ -99,9 +100,6 @@ elif st.session_state.pagina == "Ver/Alterar dados das telas":
 elif st.session_state.pagina == "Buscar relatório por data":
     executar_pagina(buscar_historico_por_data)
 
-elif st.session_state.pagina == "Ver Conta":  # ✅ NOVA CHAMADA
-    executar_pagina(ver_conta_funcionario)
-
 elif st.session_state.pagina == "Criar predição da semana":
     executar_pagina(criar_predicao_semana)
 
@@ -110,6 +108,9 @@ elif st.session_state.pagina == "Previsão automática de pedidos":
 
 elif st.session_state.pagina == "Previsão manual de pedidos":
     executar_pagina(inserir_pedidos_manual)
+
+elif st.session_state.pagina == "Ver Conta":  # ✅ NOVA CHAMADA
+    executar_pagina(ver_conta_funcionario)
 
 elif st.session_state.pagina == "Cadastrar novo usuário":
     if st.session_state.usuario == SUPERUSUARIO:
