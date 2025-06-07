@@ -40,7 +40,7 @@ st.success(f"Bem-vindo, {st.session_state.usuario}!")
 
 # Menu lateral
 opcoes = [
-    "Menu Principal",
+    "Home",
     "Inserir dados de telas",
     "Inserir somente horários",
     "Criar predição da semana",
@@ -73,7 +73,7 @@ def executar_pagina(funcao):
         st.session_state.pagina = "Menu Principal"
         st.rerun()
 
-if st.session_state.pagina == "Menu Principal":
+if st.session_state.pagina == "Home":
     st.info("Use o menu lateral para navegar pelas funcionalidades.")
 
     # Botão de logout no menu principal
