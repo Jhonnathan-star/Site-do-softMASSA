@@ -77,7 +77,14 @@ def extrair_hora_valida(horario):
         return None
 
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, time, timedelta
+
+def timedelta_para_time(td):
+    total_segundos = int(td.total_seconds())
+    horas = total_segundos // 3600
+    minutos = (total_segundos % 3600) // 60
+    segundos = total_segundos % 60
+    return time(horas, minutos, segundos)
 
 def inserir_horarios_separados_front(conn):
     st.title("Registro de Horários dos Pães")
@@ -121,6 +128,11 @@ def inserir_horarios_separados_front(conn):
 
         for reg in registros:
             id_horario, tipo_pao, turno, horario, sobra, qtd_vendida = reg
+
+            # Corrige horário se for timedelta
+            if horario and isinstance(horario, timedelta):
+                horario = timedelta_para_time(horario)
+
             col1, col2, col3 = st.columns([3, 2, 2])
 
             with col1:
@@ -144,6 +156,7 @@ def inserir_horarios_separados_front(conn):
                 st.markdown(f"**Vendidos:** {qtd_vendida}")
 
             novos_valores[id_horario] = {
+                "tipo_pao": tipo_pao,
                 "nova_hora": nova_hora,
                 "nova_sobra": nova_sobra,
                 "original_hora": horario,
@@ -156,6 +169,7 @@ def inserir_horarios_separados_front(conn):
             atualizados = 0
             for id_horario, dados in novos_valores.items():
                 try:
+                    tipo_pao = dados["tipo_pao"]
                     hora_atual = dados["original_hora"]
                     sobra_atual = dados["original_sobra"]
                     nova_hora_str = dados["nova_hora"]
@@ -174,12 +188,14 @@ def inserir_horarios_separados_front(conn):
                     else:
                         horario_sql = datetime.strptime(nova_hora_str, "%H:%M").time()
 
+                    # Atualiza tabela horarios
                     cursor.execute("""
                         UPDATE horarios
                         SET horario = %s, sobra = %s
                         WHERE id = %s
                     """, (horario_sql, nova_sobra, id_horario))
 
+                    # Atualiza quantidade vendida conforme sobra alterada
                     if houve_alteracao_sobra:
                         diferenca_sobra = nova_sobra - (sobra_atual or 0)
                         nova_qtd_vendida = max(qtd_vendida - diferenca_sobra, 0)
@@ -188,6 +204,28 @@ def inserir_horarios_separados_front(conn):
                             SET quantidade_vendida = %s
                             WHERE id = %s
                         """, (nova_qtd_vendida, id_horario))
+                    else:
+                        nova_qtd_vendida = qtd_vendida
+
+                    # Atualiza ou insere em telas_vendidas3
+                    coluna = f"telas_{tipo_pao}_{turno_selecionado}"
+                    cursor.execute("SELECT COUNT(*) FROM telas_vendidas3 WHERE id_telas = %s", (id_telas,))
+                    existe = cursor.fetchone()[0]
+
+                    if existe:
+                        cursor.execute(f"""
+                            UPDATE telas_vendidas3 SET {coluna} = %s WHERE id_telas = %s
+                        """, (nova_qtd_vendida, id_telas))
+                    else:
+                        # Para inserir, precisamos dos dados de data e semana de 'telas'
+                        cursor.execute("SELECT data, semana FROM telas WHERE id_telas = %s", (id_telas,))
+                        res = cursor.fetchone()
+                        data_telas, semana_telas = res if res else (None, None)
+
+                        cursor.execute(f"""
+                            INSERT INTO telas_vendidas3 (id_telas, {coluna}, data, semana)
+                            VALUES (%s, %s, %s, %s)
+                        """, (id_telas, nova_qtd_vendida, data_telas, semana_telas))
 
                     atualizados += 1
                 except Exception as e:
