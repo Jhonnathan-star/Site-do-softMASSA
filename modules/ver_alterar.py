@@ -2,9 +2,8 @@ import streamlit as st
 from datetime import datetime
 
 def ver_e_alterar_telas_por_data(conn):
-    st.header("🔍 Ver e Alterar Telas por Data")
+    st.header("🔍 Ver, Alterar ou Excluir Telas por Data")
 
-    # Inicializa o estado da data e se foi consultado
     if 'consultou_data' not in st.session_state:
         st.session_state.consultou_data = False
 
@@ -27,17 +26,15 @@ def ver_e_alterar_telas_por_data(conn):
         registros = cursor.fetchall()
 
         if not registros:
-            st.warning("Nenhum dado encontrado para essa data.")
+            st.warning("⚠️ Nenhum dado encontrado para essa data.")
             st.session_state.consultou_data = False
             return
 
         for r in registros:
-            with st.expander(f"📄 Registro ID {r[0]} - {r[1]} (Semana {r[2]})", expanded=True):
-                st.write(f"**ID:** {r[0]}")
+            with st.expander(f"📄 Registro - {r[1]} (Semana {r[2]})", expanded=True):
                 st.write(f"**Data:** {r[1]}")
                 st.write(f"**Semana:** {r[2]}")
 
-                # Entradas com valores preenchidos
                 nova_grossa_manha = st.number_input(
                     "Telas Grossa (Manhã)", min_value=0, value=r[3], key=f"g_m_{r[0]}"
                 )
@@ -51,16 +48,32 @@ def ver_e_alterar_telas_por_data(conn):
                     "Telas Fina (Tarde)", min_value=0, value=r[6], key=f"f_t_{r[0]}"
                 )
 
-                if st.button("💾 Atualizar Registro", key=f"atualiza_{r[0]}"):
-                    cursor.execute("""
-                        UPDATE telas SET
-                            telas_grossa_manha = %s,
-                            telas_grossa_tarde = %s,
-                            telas_fina_manha = %s,
-                            telas_fina_tarde = %s
-                        WHERE id_telas = %s
-                    """, (nova_grossa_manha, nova_grossa_tarde, nova_fina_manha, nova_fina_tarde, r[0]))
-                    conn.commit()
-                    st.success(f"✅ Registro {r[0]} atualizado com sucesso!")
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    if st.button("💾 Atualizar Registro", key=f"atualiza_{r[0]}"):
+                        cursor.execute("""
+                            UPDATE telas SET
+                                telas_grossa_manha = %s,
+                                telas_grossa_tarde = %s,
+                                telas_fina_manha = %s,
+                                telas_fina_tarde = %s
+                            WHERE id_telas = %s
+                        """, (nova_grossa_manha, nova_grossa_tarde, nova_fina_manha, nova_fina_tarde, r[0]))
+                        conn.commit()
+                        st.success("✅ Registro atualizado com sucesso!")
+
+                with col2:
+                    if st.button("🗑️ Excluir Registro", key=f"excluir_{r[0]}"):
+                        st.session_state[f"mostrar_confirmacao_{r[0]}"] = True
+
+                    if st.session_state.get(f"mostrar_confirmacao_{r[0]}", False):
+                        confirma = st.checkbox("Confirmar exclusão do registro", key=f"confirma_excluir_{r[0]}")
+                        if confirma:
+                            cursor.execute("DELETE FROM telas WHERE id_telas = %s", (r[0],))
+                            conn.commit()
+                            st.success("🗑️ Registro excluído com sucesso!")
+                            st.session_state[f"mostrar_confirmacao_{r[0]}"] = False
+                            st.rerun()
 
         cursor.close()
