@@ -1,6 +1,7 @@
-streamlit
-mysql-connector-python
-python-dotenv
-pandas
-scikit-learn
-bcrypt
+streamlit>=1.35
+mysql-connector-python>=8.0.33
+python-dotenv>=1.0.1
+pandas>=2.2
+scikit-learn>=1.4
+bcrypt>=4.1.2
+streamlit-cookies-manager>=0.1.0
