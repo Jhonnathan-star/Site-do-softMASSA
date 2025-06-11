@@ -1,14 +1,16 @@
 import streamlit as st
+# --- Configuração da página ---
 st.set_page_config(page_title="softMASSA", layout="centered")
 import os
 from database.connection import conectar
-from modules.login import main as login_main, marcar_token_expirado, gerenciar_usuarios
+from modules.login import main as login_main, marcar_token_expirado
 from modules.inserir_telas import inserir_telas
 from modules.processa_turno import inserir_horarios_separados_front, buscar_historico_por_data
 from modules.predicao import criar_predicao_semana
 from modules.ver_alterar import ver_e_alterar_telas_por_data
 from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
 from components.ver_conta_funcionario import ver_conta_funcionario
+from modules.cadastrar import gerenciar_usuarios
 from streamlit_cookies_manager import EncryptedCookieManager
 
 # --- Inicialização de Cookies ---
@@ -21,54 +23,13 @@ cookies = EncryptedCookieManager(prefix="meuapp/", password=cookie_password)
 if not cookies.ready():
     st.stop()
 
-# --- Variáveis e estados iniciais ---
+# --- Inicializar estados da sessão ---
 st.session_state.setdefault("logado", False)
 st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("pagina", "Menu Principal")
 st.session_state.setdefault("usuario_tipo", "comum")  # padrão
 
-# --- Página protegida por login ---
-conn = conectar()
-if not conn:
-    st.error("❌ Erro ao conectar ao banco de dados.")
-    st.stop()
-
-if not st.session_state["logado"]:
-    login_main(cookies)
-    conn.close()
-    st.stop()
-
-conn.close()
-
-# --- Título e saudação ---
-st.title("🍞 Sistema da softMASSA")
-st.success(f"Bem-vindo, {st.session_state['usuario']}!")
-
-# --- Definição do menu com base no tipo de usuário ---
-if st.session_state['usuario_tipo'] == "admin":
-    opcoes = [
-        "Home",
-        "Inserir telas",
-        "Inserir horários",
-        "Alterar telas",
-        "Histórico por data",
-        "Predição semanal com IA",
-        "Previsão manual de pedidos",
-        "Previsão automática de pedidos",
-        "Ver conta do funcionário",
-        "Gerenciar usuários",
-        "Sair"
-    ]
-else:
-    opcoes = [
-        "Home",
-        "Inserir horários",
-        "Histórico por data",
-        "Ver conta do funcionário",
-        "Sair"
-    ]
-
-# --- Função utilitária para execução segura ---
+# --- Função utilitária para conexão e execução segura ---
 def executar_pagina(funcao):
     conn = conectar()
     if not conn:
@@ -93,9 +54,51 @@ def logout():
     st.session_state.clear()
     st.rerun()
 
-# --- Interface lateral e controle de páginas ---
+# --- Verifica sessão antes de prosseguir ---
+conn = conectar()
+if not conn:
+    st.error("❌ Erro ao conectar ao banco de dados.")
+    st.stop()
+
+if not st.session_state["logado"]:
+    login_main(cookies)
+    conn.close()
+    st.stop()
+
+conn.close()
+
+# --- Título e boas-vindas ---
+st.title("🍞 Sistema da softMASSA")
+st.success(f"Bem-vindo, {st.session_state['usuario']}!")
+
+# --- Menu baseado no tipo de usuário ---
+if st.session_state['usuario_tipo'] == "admin":
+    opcoes = [
+        "Home",
+        "Inserir telas",
+        "Inserir horários",
+        "Alterar telas",
+        "Histórico por data",
+        "Predição semanal com IA",
+        "Previsão manual de pedidos",
+        "Previsão automática de pedidos",
+        "Ver conta do funcionário",
+        "Gerenciar usuários",
+        "Sair"
+    ]
+else:
+    opcoes = [
+        "Home",
+        "Inserir horários",
+        "Histórico por data",
+        "Ver conta do funcionário",
+        "Sair"
+    ]
+
+# --- Menu lateral ---
 pagina = st.sidebar.selectbox("Menu", opcoes)
 
+# --- Controle de navegação ---
 if pagina == "Sair":
     logout()
 

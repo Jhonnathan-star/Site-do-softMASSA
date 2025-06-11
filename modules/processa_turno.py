@@ -89,14 +89,13 @@ def timedelta_para_time(td):
 def inserir_horarios_separados_front(conn):
     st.title("Registro de Horários dos Pães")
 
-    data = st.date_input("\U0001F4C5 Selecione a data para registrar os horários")
-
+    data = st.date_input("📅 Selecione a data para registrar os horários")
     if not data:
         return
 
     data_str = data.strftime('%Y-%m-%d')
-
     cursor = conn.cursor()
+
     cursor.execute("""
         SELECT id_telas, telas_grossa_manha, telas_grossa_tarde, 
                telas_fina_manha, telas_fina_tarde 
@@ -108,189 +107,137 @@ def inserir_horarios_separados_front(conn):
         st.error(f"❌ Nenhuma entrada na tabela 'telas' para a data {data_str}.")
         return
 
-    id_telas, telas_grossa_manha, telas_grossa_tarde, telas_fina_manha, telas_fina_tarde = resultado
+    id_telas, *_ = resultado
     st.success(f"✅ Data encontrada: {data_str} (ID: {id_telas})")
 
-    turno_selecionado = st.radio("\U0001F553 Selecione o turno para edição", ["manha", "tarde"])
+    turno = st.radio("🕒 Selecione o turno", ["manha", "tarde"])
 
-    # Busca registros existentes no turno selecionado
     cursor.execute("""
-        SELECT id, tipo_pao, turno, horario, sobra, quantidade_vendida
+        SELECT id, tipo_pao, turno, horario, sobra, quantidade_vendida, telas_colocadas
         FROM horarios
         WHERE id_telas = %s AND turno = %s
         ORDER BY tipo_pao
-    """, (id_telas, turno_selecionado))
+    """, (id_telas, turno))
     registros = cursor.fetchall()
 
-    if registros:
-        st.subheader(f"\U0001F4DD Editar Horários - Turno da {turno_selecionado.capitalize()}")
-        novos_valores = {}
+    tipos_pao = ["grossa", "fina"]
+    valores = {}
 
-        for reg in registros:
-            id_horario, tipo_pao, turno, horario, sobra, qtd_vendida = reg
+    editando = bool(registros)
+    if editando:
+        st.subheader(f"📝 Editar Horários - Turno da {turno}")
+    else:
+        st.subheader(f"🆕 Inserir Horários - Turno da {turno}")
+
+    for tipo in tipos_pao:
+        reg = next((r for r in registros if r[1] == tipo), None)
+        st.markdown(f"#### {tipo.capitalize()}")
+
+        if reg:
+            id_horario, _, _, horario, sobra, qtd_vendida, colocadas = reg
+            
+            # Converter timedelta para time se necessário
             if isinstance(horario, timedelta):
                 horario = timedelta_para_time(horario)
 
-            col1, col2, col3 = st.columns([3, 2, 2])
+            col1, col2 = st.columns([3, 2])
 
             with col1:
-                hora_formatada = horario.strftime("%H:%M") if horario else ""
-                nova_hora = st.text_input(f"{tipo_pao.capitalize()} - Horário (HH:MM)", value=hora_formatada, key=f"hora_{id_horario}")
-
+                hora_input = st.text_input(f"⏱️ Horário ({tipo})", value=horario.strftime("%H:%M") if horario else "", key=f"{tipo}_hora")
             with col2:
-                nova_sobra = st.number_input(f"Sobra ({tipo_pao.capitalize()})", min_value=0, value=sobra or 0, step=1, key=f"sobra_{id_horario}")
+                sobra_input = st.number_input(f"🥖 Sobra ({tipo})", min_value=0, value=sobra or 0, key=f"{tipo}_sobra")
 
-            with col3:
-                st.markdown(f"**Vendidos:** {qtd_vendida}")
+            colocadas_input = None
+            if tipo == "fina":
+                colocadas_input = st.number_input(f"🧺 Telas Colocadas ({tipo})", min_value=0, value=colocadas or 0, key=f"{tipo}_colocadas")
 
-            novos_valores[id_horario] = {
-                "tipo_pao": tipo_pao,
-                "nova_hora": nova_hora.strip(),
-                "nova_sobra": nova_sobra,
-                "original_hora": horario,
-                "original_sobra": sobra,
+            valores[tipo] = {
+                "id_horario": id_horario,
+                "hora": hora_input.strip(),
+                "sobra": sobra_input,
+                "colocadas": colocadas_input,
                 "qtd_vendida": qtd_vendida
             }
 
-        if st.button("\U0001F4BE Salvar alterações"):
-            erros, atualizados = [], 0
-            for id_horario, dados in novos_valores.items():
-                try:
-                    nova_hora_str = dados["nova_hora"]
-                    nova_sobra = dados["nova_sobra"]
-                    hora_atual = dados["original_hora"]
-                    sobra_atual = dados["original_sobra"] or 0
-                    qtd_vendida = dados["qtd_vendida"]
-                    tipo_pao = dados["tipo_pao"]
-
-                    houve_alteracao = (nova_hora_str != (hora_atual.strftime("%H:%M") if hora_atual else "")) or (nova_sobra != sobra_atual)
-                    if not houve_alteracao:
-                        continue
-
-                    horario_sql = datetime.strptime(nova_hora_str, "%H:%M").time() if nova_hora_str else None
-
-                    # Atualiza horarios
-                    cursor.execute("""
-                        UPDATE horarios SET horario = %s, sobra = %s WHERE id = %s
-                    """, (horario_sql, nova_sobra, id_horario))
-
-                    nova_qtd_vendida = max(qtd_vendida - (nova_sobra - sobra_atual), 0)
-                    cursor.execute("""
-                        UPDATE horarios SET quantidade_vendida = %s WHERE id = %s
-                    """, (nova_qtd_vendida, id_horario))
-
-                    # Atualiza ou insere em telas_vendidas3
-                    coluna = f"telas_{tipo_pao}_{turno_selecionado}"
-                    cursor.execute("SELECT COUNT(*) FROM telas_vendidas3 WHERE id_telas = %s", (id_telas,))
-                    existe = cursor.fetchone()[0]
-
-                    if existe:
-                        cursor.execute(f"""
-                            UPDATE telas_vendidas3 SET {coluna} = %s WHERE id_telas = %s
-                        """, (nova_qtd_vendida, id_telas))
-                    else:
-                        cursor.execute("SELECT data, semana FROM telas WHERE id_telas = %s", (id_telas,))
-                        data_telas, semana_telas = cursor.fetchone()
-                        cursor.execute(f"""
-                            INSERT INTO telas_vendidas3 (id_telas, {coluna}, data, semana)
-                            VALUES (%s, %s, %s, %s)
-                        """, (id_telas, nova_qtd_vendida, data_telas, semana_telas))
-
-                    atualizados += 1
-                except Exception as e:
-                    erros.append(f"Erro no ID {id_horario}: {str(e)}")
-
-            conn.commit()
-
-            if erros:
-                st.error("⚠️ Alguns erros ocorreram:")
-                for e in erros:
-                    st.write(e)
-            elif atualizados:
-                st.success(f"✅ {atualizados} registros atualizados com sucesso!")
-            else:
-                st.info("🔄 Nenhuma alteração detectada.")
-
-    else:
-        st.subheader(f"\U0001F195 Inserir Horários - Turno da {turno_selecionado.capitalize()}")
-        paes = [("grossa", telas_grossa_manha if turno_selecionado == "manha" else telas_grossa_tarde),
-                ("fina", telas_fina_manha if turno_selecionado == "manha" else telas_fina_tarde)]
-
-        novos_dados = {}
-        for tipo_pao, total in paes:
-            col1, col2 = st.columns(2)
+        else:
+            col1, col2 = st.columns([3, 2])
 
             with col1:
-                nova_hora = st.text_input(f"\U0001F552 Horário ({tipo_pao.capitalize()} - {turno_selecionado}) (HH:MM)", "", key=f"novo_hora_{tipo_pao}")
+                hora_input = st.text_input(f"⏱️ Horário ({tipo})", key=f"novo_{tipo}_hora")
             with col2:
-                nova_sobra = st.number_input(f"\U0001F956 Sobra ({tipo_pao.capitalize()} - {turno_selecionado})", min_value=0, value=0, step=1, key=f"novo_sobra_{tipo_pao}")
+                sobra_input = st.number_input(f"🥖 Sobra ({tipo})", min_value=0, key=f"novo_{tipo}_sobra")
 
-            novos_dados[tipo_pao] = {"hora": nova_hora.strip(), "sobra": nova_sobra, "total": total}
+            colocadas_input = None
+            if tipo == "fina":
+                colocadas_input = st.number_input(f"🧺 Telas Colocadas ({tipo})", min_value=0, key=f"novo_{tipo}_colocadas")
 
-        if st.button("\U0001F4BE Enviar para o banco"):
-            erros, inseridos = [], 0
-            for tipo_pao, dados in novos_dados.items():
-                try:
-                    horario_sql = datetime.strptime(dados["hora"], "%H:%M").time() if dados["hora"] else None
-                    sobra = dados["sobra"]
-                    total = dados["total"]
-                    quantidade_vendida = max(total - sobra, 0)
+            valores[tipo] = {
+                "id_horario": None,
+                "hora": hora_input.strip(),
+                "sobra": sobra_input,
+                "colocadas": colocadas_input
+            }
 
+    botao_label = "💾 Salvar Alterações" if editando else "💾 Salvar"
+    if st.button(botao_label):
+        atualizados, inseridos, erros = 0, 0, []
+
+        for tipo, dados in valores.items():
+            try:
+                hora = datetime.strptime(dados["hora"], "%H:%M").time() if dados["hora"] else None
+                sobra = dados["sobra"]
+
+                if tipo == "fina":
+                    colocadas = dados["colocadas"]
+                    vendidas = max(colocadas - sobra, 0) if colocadas is not None else None
+                else:
+                    colocadas = None
+                    vendidas = None
+
+                if dados["id_horario"]:
                     cursor.execute("""
-                        INSERT INTO horarios (id_telas, tipo_pao, turno, horario, sobra, quantidade_vendida)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (id_telas, tipo_pao, turno_selecionado, horario_sql, sobra, quantidade_vendida))
+                        UPDATE horarios 
+                        SET horario = %s, sobra = %s, quantidade_vendida = %s, telas_colocadas = %s
+                        WHERE id = %s
+                    """, (hora, sobra, vendidas, colocadas, dados["id_horario"]))
+                    atualizados += 1
+                else:
+                    cursor.execute("""
+                        INSERT INTO horarios (id_telas, tipo_pao, turno, horario, sobra, quantidade_vendida, telas_colocadas)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (id_telas, tipo, turno, hora, sobra, vendidas, colocadas))
+                    inseridos += 1
 
-                    coluna = f"telas_{tipo_pao}_{turno_selecionado}"
-                    cursor.execute("SELECT data, semana FROM telas WHERE id_telas = %s", (id_telas,))
-                    data_telas, semana_telas = cursor.fetchone()
-
+                if tipo == "fina":
+                    coluna_vendida = f"telas_{tipo}_{turno}"
                     cursor.execute("SELECT COUNT(*) FROM telas_vendidas3 WHERE id_telas = %s", (id_telas,))
                     existe = cursor.fetchone()[0]
 
                     if existe:
                         cursor.execute(f"""
-                            UPDATE telas_vendidas3 SET {coluna} = %s WHERE id_telas = %s
-                        """, (quantidade_vendida, id_telas))
+                            UPDATE telas_vendidas3 SET {coluna_vendida} = %s WHERE id_telas = %s
+                        """, (vendidas, id_telas))
                     else:
+                        cursor.execute("SELECT data, semana FROM telas WHERE id_telas = %s", (id_telas,))
+                        data_telas, semana = cursor.fetchone()
                         cursor.execute(f"""
-                            INSERT INTO telas_vendidas3 (id_telas, {coluna}, data, semana)
+                            INSERT INTO telas_vendidas3 (id_telas, {coluna_vendida}, data, semana)
                             VALUES (%s, %s, %s, %s)
-                        """, (id_telas, quantidade_vendida, data_telas, semana_telas))
+                        """, (id_telas, vendidas, data_telas, semana))
 
-                    inseridos += 1
-                except Exception as e:
-                    erros.append(f"Erro ao inserir {tipo_pao}: {str(e)}")
+                    campo_fina = f"telas_fina_{turno}"
+                    cursor.execute(f"""
+                        UPDATE telas SET {campo_fina} = %s WHERE id_telas = %s
+                    """, (colocadas, id_telas))
 
-            conn.commit()
+            except Exception as e:
+                erros.append(f"{tipo}: {e}")
 
-            # Preencher os campos da tarde com 0 se for domingo e turno manhã
-            if turno_selecionado == "manha" and data.weekday() == 6:
-                cursor.execute("SELECT COUNT(*) FROM telas_vendidas3 WHERE id_telas = %s", (id_telas,))
-                existe = cursor.fetchone()[0]
+        conn.commit()
 
-                if existe:
-                    cursor.execute("""
-                        UPDATE telas_vendidas3
-                        SET telas_grossa_tarde = 0, telas_fina_tarde = 0
-                        WHERE id_telas = %s
-                    """, (id_telas,))
-                else:
-                    cursor.execute("SELECT data, semana FROM telas WHERE id_telas = %s", (id_telas,))
-                    data_telas, semana_telas = cursor.fetchone()
-                    cursor.execute("""
-                        INSERT INTO telas_vendidas3 (id_telas, telas_grossa_tarde, telas_fina_tarde, data, semana)
-                        VALUES (%s, 0, 0, %s, %s)
-                    """, (id_telas, data_telas, semana_telas))
-
-                conn.commit()
-
-            if erros:
-                st.error("⚠️ Alguns erros ocorreram ao inserir dados:")
-                for e in erros:
-                    st.write(e)
-            elif inseridos:
-                st.success(f"✅ {inseridos} registros inseridos com sucesso!")
-            else:
-                st.info("ℹ️ Nenhum dado enviado (campos vazios ou inválidos).")
-
+        if erros:
+            st.error("⚠️ Erros encontrados:")
+            for e in erros:
+                st.write(e)
+        else:
+            st.success(f"✅ {atualizados} atualizados, {inseridos} inseridos com sucesso!")
