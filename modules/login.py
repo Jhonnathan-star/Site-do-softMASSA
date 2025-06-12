@@ -100,3 +100,4 @@ def main(cookies):
     checar_sessao(conn, cookies)
     app_principal(conn, cookies)
     conn.close()
+    

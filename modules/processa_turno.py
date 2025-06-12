@@ -1,64 +1,6 @@
 import streamlit as st
-from datetime import datetime, time
-from mysql.connector import Error
-
-def buscar_historico_por_data(conn):
-    st.header("🔎 Buscar Histórico por Data")
-
-    data_input = st.date_input("Digite a data para buscar:", format="YYYY-MM-DD")
-
-    if st.button("Buscar"):
-        cursor = conn.cursor()
-        sql = """
-            SELECT 
-                t.data,
-                t.semana,
-                t.telas_grossa_manha,
-                t.telas_grossa_tarde,
-                t.telas_fina_manha,
-                t.telas_fina_tarde,
-                h.tipo_pao,
-                h.turno,
-                h.horario,
-                h.quantidade_vendida
-            FROM telas t
-            LEFT JOIN horarios h ON t.id_telas = h.id_telas
-            WHERE t.data = %s
-        """
-        cursor.execute(sql, (data_input,))
-        resultados = cursor.fetchall()
-
-        if resultados:
-            st.markdown("---")
-            st.markdown(f"### Resumo do dia {data_input}:\n")
-            primeira_linha = resultados[0]
-            st.write(f"**Data:** {primeira_linha[0]}")
-            st.write(f"**Semana:** {primeira_linha[1]}")
-            st.write(f"**Telas Grossa (Manhã):** {primeira_linha[2]}")
-            st.write(f"**Telas Grossa (Tarde):** {primeira_linha[3]}")
-            st.write(f"**Telas Fina (Manhã):** {primeira_linha[4]}")
-            st.write(f"**Telas Fina (Tarde):** {primeira_linha[5]}")
-            st.markdown("---")
-
-            for row in resultados:
-                tipo_pao = row[6]
-                turno = row[7]
-                horario = row[8]
-                quantidade = row[9]
-
-                st.write(f"**Tipo de Pão:** {tipo_pao} | **Turno:** {turno}")
-                if horario:
-                    st.write(f"⏰ Horário: {horario} | Vendido: {quantidade}")
-                else:
-                    st.write(f"Vendidos: {quantidade}")
-                st.markdown("---")
-        else:
-            st.warning("Nenhum dado encontrado para essa data.")
-        
-        cursor.close()
-
-import streamlit as st
 from datetime import datetime, time, timedelta
+import pandas as pd
 
 def extrair_hora_valida(horario):
     if horario is None:
@@ -76,8 +18,113 @@ def extrair_hora_valida(horario):
     except:
         return None
 
-import streamlit as st
+def buscar_historico_por_data(conn):
+    st.header("📊 Histórico de Produção e Vendas")
+
+    modo = st.radio("🔍 Como deseja consultar?", ["Ver por data específica", "Consulta por intervalo de datas"])
+
+    if modo == "Ver por data específica":
+        data_input = st.date_input("Selecione a data:", format="YYYY-MM-DD")
+
+        if st.button("Buscar"):
+            mostrar_historico_para_datas(conn, [data_input])
+
+    elif modo == "Consulta por intervalo de datas":
+        col1, col2 = st.columns(2)
+        with col1:
+            data_ini = st.date_input("📅 Data inicial", format="YYYY-MM-DD")
+        with col2:
+            data_fim = st.date_input("📅 Data final", format="YYYY-MM-DD")
+
+        if st.button("Buscar intervalo"):
+            if data_ini > data_fim:
+                st.error("⚠️ Data inicial deve ser anterior à final.")
+            else:
+                datas = pd.date_range(start=data_ini, end=data_fim).to_list()
+                mostrar_historico_para_datas(conn, datas)
+
+def mostrar_historico_para_datas(conn, datas):
+    cursor = conn.cursor()
+
+    for data_input in datas:
+        sql = """
+            SELECT 
+                t.id_telas,
+                t.data,
+                t.semana,
+                t.telas_grossa_manha,
+                t.telas_grossa_tarde,
+                t.telas_fina_manha,
+                t.telas_fina_tarde,
+                h.tipo_pao,
+                h.turno,
+                h.horario,
+                h.quantidade_vendida
+            FROM telas t
+            LEFT JOIN horarios h ON t.id_telas = h.id_telas
+            WHERE t.data = %s
+        """
+        cursor.execute(sql, (data_input,))
+        resultados = cursor.fetchall()
+
+        if not resultados:
+            st.warning(f"❌ Nenhum dado encontrado para a data {data_input}.")
+            continue
+
+        primeira = resultados[0]
+        st.markdown(f"### 📅 Resumo do dia {primeira[1]} - Semana {primeira[2]}")
+
+        # Valores de telas colocadas
+        colocadas_dict = {
+            ("grossa", "manha"): primeira[3],
+            ("grossa", "tarde"): primeira[4],
+            ("fina", "manha"): primeira[5],
+            ("fina", "tarde"): primeira[6]
+        }
+
+        # Criar dicionário com dados de horários
+        horarios_map = {}
+        for row in resultados:
+            tipo = row[7]
+            turno = row[8]
+            horario = extrair_hora_valida(row[9])
+            vendida = row[10]
+            if tipo and turno:
+                horarios_map[(tipo, turno)] = {
+                    "horario": horario.strftime("%H:%M") if horario else "-",
+                    "vendida": vendida
+                }
+
+        # Ordem fixa
+        ordem_fixa = [
+            ("grossa", "manha"),
+            ("grossa", "tarde"),
+            ("fina", "manha"),
+            ("fina", "tarde")
+        ]
+
+        dados = []
+        for tipo, turno in ordem_fixa:
+            colocado = colocadas_dict.get((tipo, turno), None)
+            horario = horarios_map.get((tipo, turno), {}).get("horario", "-")
+            vendida = horarios_map.get((tipo, turno), {}).get("vendida", None)
+
+            dados.append({
+                "🥖 Colocadas": colocado,
+                "Tipo de Pão": tipo.capitalize(),
+                "Turno": turno.capitalize(),
+                "⏱️ Horário": horario,
+                "🛒 Vendidas": vendida if vendida is not None else "-"
+            })
+
+        df = pd.DataFrame(dados)[["🥖 Colocadas", "Tipo de Pão", "Turno", "⏱️ Horário", "🛒 Vendidas"]]
+        st.dataframe(df, use_container_width=True)
+        st.markdown("---")
+
+    cursor.close()
+
 from datetime import datetime, time, timedelta
+import streamlit as st
 
 def timedelta_para_time(td):
     total_segundos = int(td.total_seconds())
@@ -89,7 +136,7 @@ def timedelta_para_time(td):
 def inserir_horarios_separados_front(conn):
     st.title("Registro de Horários dos Pães")
 
-    data = st.date_input("📅 Selecione a data para registrar os horários")
+    data = st.date_input("\U0001F4C5 Selecione a data para registrar os horários")
     if not data:
         return
 
@@ -107,10 +154,12 @@ def inserir_horarios_separados_front(conn):
         st.error(f"❌ Nenhuma entrada na tabela 'telas' para a data {data_str}.")
         return
 
-    id_telas, *_ = resultado
+    id_telas, grossa_manha, grossa_tarde, fina_manha, fina_tarde = resultado
     st.success(f"✅ Data encontrada: {data_str} (ID: {id_telas})")
 
-    turno = st.radio("🕒 Selecione o turno", ["manha", "tarde"])
+    turno = st.radio("\U0001F552 Selecione o turno", ["manha", "tarde"])
+    valor_grossa = grossa_manha if turno == "manha" else grossa_tarde
+    valor_fina = fina_manha if turno == "manha" else fina_tarde
 
     cursor.execute("""
         SELECT id, tipo_pao, turno, horario, sobra, quantidade_vendida, telas_colocadas
@@ -124,10 +173,7 @@ def inserir_horarios_separados_front(conn):
     valores = {}
 
     editando = bool(registros)
-    if editando:
-        st.subheader(f"📝 Editar Horários - Turno da {turno}")
-    else:
-        st.subheader(f"🆕 Inserir Horários - Turno da {turno}")
+    st.subheader(f"{'\U0001F4DD Editar' if editando else '🆕 Inserir'} Horários - Turno da {turno}")
 
     for tipo in tipos_pao:
         reg = next((r for r in registros if r[1] == tipo), None)
@@ -135,42 +181,27 @@ def inserir_horarios_separados_front(conn):
 
         if reg:
             id_horario, _, _, horario, sobra, qtd_vendida, colocadas = reg
-            
-            # Converter timedelta para time se necessário
-            if isinstance(horario, timedelta):
-                horario = timedelta_para_time(horario)
-
             col1, col2 = st.columns([3, 2])
-
             with col1:
                 hora_input = st.text_input(f"⏱️ Horário ({tipo})", value=horario.strftime("%H:%M") if horario else "", key=f"{tipo}_hora")
             with col2:
-                sobra_input = st.number_input(f"🥖 Sobra ({tipo})", min_value=0, value=sobra or 0, key=f"{tipo}_sobra")
+                sobra_input = st.number_input(f"\U0001F956 Sobra ({tipo})", min_value=0, value=sobra or 0, key=f"{tipo}_sobra")
 
-            colocadas_input = None
-            if tipo == "fina":
-                colocadas_input = st.number_input(f"🧺 Telas Colocadas ({tipo})", min_value=0, value=colocadas or 0, key=f"{tipo}_colocadas")
-
+            colocadas_input = st.number_input(f"\U0001F9FA Telas Colocadas ({tipo})", min_value=0, value=colocadas or 0, key=f"{tipo}_colocadas") if tipo == "fina" else None
             valores[tipo] = {
                 "id_horario": id_horario,
                 "hora": hora_input.strip(),
                 "sobra": sobra_input,
-                "colocadas": colocadas_input,
-                "qtd_vendida": qtd_vendida
+                "colocadas": colocadas_input
             }
-
         else:
             col1, col2 = st.columns([3, 2])
-
             with col1:
                 hora_input = st.text_input(f"⏱️ Horário ({tipo})", key=f"novo_{tipo}_hora")
             with col2:
-                sobra_input = st.number_input(f"🥖 Sobra ({tipo})", min_value=0, key=f"novo_{tipo}_sobra")
+                sobra_input = st.number_input(f"\U0001F956 Sobra ({tipo})", min_value=0, key=f"novo_{tipo}_sobra")
 
-            colocadas_input = None
-            if tipo == "fina":
-                colocadas_input = st.number_input(f"🧺 Telas Colocadas ({tipo})", min_value=0, key=f"novo_{tipo}_colocadas")
-
+            colocadas_input = st.number_input(f"\U0001F9FA Telas Colocadas ({tipo})", min_value=0, key=f"novo_{tipo}_colocadas") if tipo == "fina" else None
             valores[tipo] = {
                 "id_horario": None,
                 "hora": hora_input.strip(),
@@ -178,57 +209,63 @@ def inserir_horarios_separados_front(conn):
                 "colocadas": colocadas_input
             }
 
-    botao_label = "💾 Salvar Alterações" if editando else "💾 Salvar"
-    if st.button(botao_label):
+    if st.button("\U0001F4BE Salvar" if not editando else "\U0001F4BE Salvar Alterações"):
         atualizados, inseridos, erros = 0, 0, []
 
         for tipo, dados in valores.items():
             try:
                 hora = datetime.strptime(dados["hora"], "%H:%M").time() if dados["hora"] else None
                 sobra = dados["sobra"]
+                colocadas = dados["colocadas"] if tipo == "fina" else None
 
-                if tipo == "fina":
-                    colocadas = dados["colocadas"]
-                    vendidas = max(colocadas - sobra, 0) if colocadas is not None else None
-                else:
-                    colocadas = None
-                    vendidas = None
+                quantidade_base = valor_fina if tipo == "fina" else valor_grossa
+                quantidade_vendida = max(quantidade_base - sobra, 0)
 
                 if dados["id_horario"]:
                     cursor.execute("""
                         UPDATE horarios 
                         SET horario = %s, sobra = %s, quantidade_vendida = %s, telas_colocadas = %s
                         WHERE id = %s
-                    """, (hora, sobra, vendidas, colocadas, dados["id_horario"]))
+                    """, (hora, sobra, quantidade_vendida, colocadas, dados["id_horario"]))
                     atualizados += 1
                 else:
                     cursor.execute("""
                         INSERT INTO horarios (id_telas, tipo_pao, turno, horario, sobra, quantidade_vendida, telas_colocadas)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """, (id_telas, tipo, turno, hora, sobra, vendidas, colocadas))
+                    """, (id_telas, tipo, turno, hora, sobra, quantidade_vendida, colocadas))
                     inseridos += 1
 
-                if tipo == "fina":
-                    coluna_vendida = f"telas_{tipo}_{turno}"
-                    cursor.execute("SELECT COUNT(*) FROM telas_vendidas3 WHERE id_telas = %s", (id_telas,))
-                    existe = cursor.fetchone()[0]
+                # ✅ Atualizar telas_vendidas3
+                coluna_vendida = f"telas_{tipo}_{turno}"
+                cursor.execute("SELECT COUNT(*) FROM telas_vendidas3 WHERE id_telas = %s", (id_telas,))
+                existe = cursor.fetchone()[0]
 
-                    if existe:
-                        cursor.execute(f"""
-                            UPDATE telas_vendidas3 SET {coluna_vendida} = %s WHERE id_telas = %s
-                        """, (vendidas, id_telas))
-                    else:
-                        cursor.execute("SELECT data, semana FROM telas WHERE id_telas = %s", (id_telas,))
-                        data_telas, semana = cursor.fetchone()
-                        cursor.execute(f"""
-                            INSERT INTO telas_vendidas3 (id_telas, {coluna_vendida}, data, semana)
-                            VALUES (%s, %s, %s, %s)
-                        """, (id_telas, vendidas, data_telas, semana))
-
-                    campo_fina = f"telas_fina_{turno}"
+                if existe:
                     cursor.execute(f"""
-                        UPDATE telas SET {campo_fina} = %s WHERE id_telas = %s
-                    """, (colocadas, id_telas))
+                        UPDATE telas_vendidas3 SET {coluna_vendida} = %s WHERE id_telas = %s
+                    """, (quantidade_vendida, id_telas))
+                else:
+                    cursor.execute("SELECT data, semana FROM telas WHERE id_telas = %s", (id_telas,))
+                    data_telas, semana = cursor.fetchone()
+                    cursor.execute(f"""
+                        INSERT INTO telas_vendidas3 (id_telas, {coluna_vendida}, data, semana)
+                        VALUES (%s, %s, %s, %s)
+                    """, (id_telas, quantidade_vendida, data_telas, semana))
+
+                # ✅ Atualizar telas colocadas + sobra (somente para fina)
+                if tipo == "fina":
+                    total_telas = colocadas + sobra
+                    if turno == "manha":
+                        cursor.execute("""
+                            UPDATE telas SET telas_fina_tarde = %s WHERE id_telas = %s
+                        """, (total_telas, id_telas))
+                    elif turno == "tarde":
+                        cursor.execute("SELECT data FROM telas WHERE id_telas = %s", (id_telas,))
+                        data_atual = cursor.fetchone()[0]
+                        dia_seguinte = data_atual + timedelta(days=1)
+                        cursor.execute("""
+                            UPDATE telas SET telas_fina_manha = %s WHERE data = %s
+                        """, (total_telas, dia_seguinte))
 
             except Exception as e:
                 erros.append(f"{tipo}: {e}")

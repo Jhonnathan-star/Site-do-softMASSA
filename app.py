@@ -1,7 +1,12 @@
 import streamlit as st
+
 # --- Configuração da página ---
 st.set_page_config(page_title="softMASSA", layout="centered")
+
+from datetime import datetime, time, timedelta
+import pandas as pd
 import os
+
 from database.connection import conectar
 from modules.login import main as login_main, marcar_token_expirado
 from modules.inserir_telas import inserir_telas
@@ -26,8 +31,10 @@ if not cookies.ready():
 # --- Inicializar estados da sessão ---
 st.session_state.setdefault("logado", False)
 st.session_state.setdefault("usuario", None)
-st.session_state.setdefault("pagina", "Menu Principal")
-st.session_state.setdefault("usuario_tipo", "comum")  # padrão
+st.session_state.setdefault("pagina", "Home")
+st.session_state.setdefault("usuario_tipo", "comum")
+st.session_state.setdefault("mostrar_menu", True)
+st.session_state.setdefault("mostrar_menu_usuario", False)
 
 # --- Função utilitária para conexão e execução segura ---
 def executar_pagina(funcao):
@@ -67,48 +74,113 @@ if not st.session_state["logado"]:
 
 conn.close()
 
-# --- Título e boas-vindas ---
-st.title("🍞 Sistema da softMASSA")
-st.success(f"Bem-vindo, {st.session_state['usuario']}!")
-
-# --- Menu baseado no tipo de usuário ---
+# --- Definir opções do menu ---
 if st.session_state['usuario_tipo'] == "admin":
     opcoes = [
-        "Home",
         "Inserir telas",
-        "Inserir horários",
+        "Registrar horários",
         "Alterar telas",
         "Histórico por data",
         "Predição semanal com IA",
         "Previsão manual de pedidos",
         "Previsão automática de pedidos",
         "Ver conta do funcionário",
-        "Gerenciar usuários",
-        "Sair"
+        "Gerenciar usuários"
     ]
 else:
     opcoes = [
-        "Home",
-        "Inserir horários",
+        "Registrar horários",
         "Histórico por data",
-        "Ver conta do funcionário",
-        "Sair"
+        "Ver conta do funcionário"
     ]
 
+# --- Página atual ---
+pagina = st.session_state.get("pagina", "Home")
+
+# --- Barra superior: botão menu + usuário + perfil ---
+col_top = st.columns([1, 8, 3])
+
+# Botão suspenso (menu) no canto superior esquerdo
+with col_top[0]:
+    st.markdown("""
+        <style>
+            .css-18ni7ap {
+                padding: 0 !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+    if not st.session_state["mostrar_menu"]:
+        if st.button("☰", key="open_menu", help="Menu"):
+            st.session_state["mostrar_menu"] = True
+            st.session_state["pagina"] = "Home"
+            st.rerun()
+
+# Título apenas na Home
+with col_top[1]:
+    if pagina == "Home":
+        st.markdown("## 🍞 Sistema da softMASSA")
+
+with col_top[2]:
+    perfil_col1, perfil_col2 = st.columns([5, 1])
+    with perfil_col1:
+        st.markdown(
+            f"""
+            <div style='
+                font-size: 11px;
+                line-height: 32px;
+                text-align: right;
+                padding-right: 6px;
+                white-space: nowrap;
+                max-width: 150px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            '>
+                {st.session_state.get('usuario', '')}({st.session_state.get('usuario_tipo', '').lower()})
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with perfil_col2:
+        if st.button("👤", key="perfil_btn", help="Perfil"):
+            st.session_state["mostrar_menu_usuario"] = not st.session_state["mostrar_menu_usuario"]
+
+        if st.session_state["mostrar_menu_usuario"]:
+            st.markdown("""
+                <style>
+                div.stButton > button:first-child {
+                    font-size: 8px !important;
+                    padding: 2px 6px !important;
+                    min-width: 40px !important;
+                    white-space: nowrap !important;
+                    height: 22px !important;
+                    margin-top: -4px !important;  /* valor negativo para colar */
+                }
+                </style>
+                """, unsafe_allow_html=True)
+            if st.button("Sair", key="logout_btn"):
+                logout()
+
+
 # --- Menu lateral ---
-pagina = st.sidebar.selectbox("Menu", opcoes)
+if st.session_state["mostrar_menu"]:
+    with st.sidebar:
+        st.markdown("## 🍞 Sistema da softMASSA")
+        st.markdown("### 📂 Menu")
+        for opcao in opcoes:
+            if st.button(opcao, use_container_width=True):
+                st.session_state["pagina"] = opcao
+                st.session_state["mostrar_menu"] = False
+                st.rerun()
 
-# --- Controle de navegação ---
-if pagina == "Sair":
-    logout()
-
-elif pagina == "Home":
+# --- Conteúdo das páginas ---
+if pagina == "Home":
+    st.success(f"Bem-vindo, {st.session_state['usuario']}!")
     st.write("Página inicial do sistema.")
 
 elif pagina == "Inserir telas":
     executar_pagina(inserir_telas)
 
-elif pagina == "Inserir horários":
+elif pagina == "Registrar horários":
     executar_pagina(inserir_horarios_separados_front)
 
 elif pagina == "Alterar telas":
