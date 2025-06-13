@@ -96,7 +96,6 @@ def gerenciar_usuarios(conn):
                     st.info("Nenhuma alteração feita.")
 
         with col2:
-            # Estados de confirmação
             if "confirmar_exclusao_usuario" not in st.session_state:
                 st.session_state.confirmar_exclusao_usuario = False
             if "usuario_id_excluir" not in st.session_state:
@@ -112,9 +111,10 @@ def gerenciar_usuarios(conn):
                         st.session_state.usuario_nome_excluir = usuario_nome
                         st.rerun()
             else:
-                # Buscar vínculos antes de excluir
                 try:
                     cursor = conn.cursor()
+
+                    # Verificações vinculadas
                     cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM conta_funcionarios WHERE id_usuario = %s", 
                                    (st.session_state.usuario_id_excluir,))
                     total_conta = cursor.fetchone()[0]
@@ -123,9 +123,13 @@ def gerenciar_usuarios(conn):
                                    (st.session_state.usuario_id_excluir,))
                     total_faltas = cursor.fetchone()[0]
 
+                    cursor.execute("SELECT COUNT(*) FROM extras WHERE id_usuario = %s", 
+                                   (st.session_state.usuario_id_excluir,))
+                    total_extras = cursor.fetchone()[0]
+
                     st.markdown("---")
                     st.warning(f"⚠️ Deseja realmente excluir o usuário **{st.session_state.usuario_nome_excluir}**?")
-                    
+
                     if total_conta > 0:
                         st.info(f"💵 Este usuário possui **R$ {total_conta:.2f}** em registros de gastos.")
                     else:
@@ -135,6 +139,11 @@ def gerenciar_usuarios(conn):
                         st.info(f"📋 Este usuário possui **{total_faltas} falta(s)** registrada(s).")
                     else:
                         st.info("📋 Nenhuma falta registrada.")
+
+                    if total_extras > 0:
+                        st.info(f"🕒 Este usuário possui **{total_extras} registro(s) de horas extras**.")
+                    else:
+                        st.info("🕒 Nenhuma hora extra registrada.")
                 except Exception as e:
                     st.error(f"Erro ao verificar dados vinculados: {e}")
                 finally:
@@ -145,13 +154,15 @@ def gerenciar_usuarios(conn):
                     try:
                         cursor = conn.cursor()
 
-                        # Exclui dados vinculados
+                        # Excluir dados vinculados
                         cursor.execute("DELETE FROM conta_funcionarios WHERE id_usuario = %s", 
                                        (st.session_state.usuario_id_excluir,))
                         cursor.execute("DELETE FROM faltas WHERE id_usuario = %s", 
                                        (st.session_state.usuario_id_excluir,))
+                        cursor.execute("DELETE FROM extras WHERE id_usuario = %s", 
+                                       (st.session_state.usuario_id_excluir,))
 
-                        # Exclui usuário
+                        # Excluir usuário
                         cursor.execute("DELETE FROM usuarios WHERE id = %s", 
                                        (st.session_state.usuario_id_excluir,))
                         conn.commit()
@@ -161,6 +172,7 @@ def gerenciar_usuarios(conn):
                     finally:
                         cursor.close()
 
+                    # Resetar estados
                     st.session_state.confirmar_exclusao_usuario = False
                     st.session_state.usuario_id_excluir = None
                     st.rerun()
@@ -169,3 +181,4 @@ def gerenciar_usuarios(conn):
                     st.session_state.confirmar_exclusao_usuario = False
                     st.session_state.usuario_id_excluir = None
                     st.rerun()
+

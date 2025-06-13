@@ -74,10 +74,9 @@ if not st.session_state["logado"]:
 conn.close()
 
 # --- Botão para mostrar/ocultar menu ---
-col1, col2 = st.columns([1,9])
+col1, col2 = st.columns([1, 9])
 with col1:
     if st.button("☰"):
-        # Alterna entre mostrar e esconder o menu
         st.session_state.menu_visivel = not st.session_state.menu_visivel
 
 # --- Mostrar o menu se estiver visível ---
@@ -109,19 +108,18 @@ if st.session_state.menu_visivel:
         for opcao in opcoes:
             if st.button(opcao, use_container_width=True):
                 st.session_state["pagina"] = opcao
-                st.session_state.menu_visivel = False  # esconde o menu ao selecionar uma página
+                st.session_state.menu_visivel = False
                 st.rerun()
 
         if st.button("🚪 Sair"):
             logout()
 
-# --- Cabeçalho da página ---
-st.markdown("## 🍞 Sistema da softMASSA")
-
 # --- Página inicial ou selecionada ---
 pagina = st.session_state.get("pagina", "Home")
 
+# ✅ TÍTULO SOMENTE NA HOME
 if pagina == "Home":
+    st.markdown("## 🍞 Sistema da softMASSA")
     st.success(f"Bem-vindo, {st.session_state['usuario']}!")
     st.write("Página inicial do sistema.")
 
@@ -151,3 +149,4 @@ elif pagina == "Ver conta do funcionário":
 
 elif pagina == "Gerenciar usuários":
     executar_pagina(gerenciar_usuarios)
+
