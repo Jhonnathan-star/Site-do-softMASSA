@@ -11,9 +11,10 @@ def gerenciar_usuarios(conn):
         nova_senha = st.text_input("Nova senha", type="password")
         confirmar_senha = st.text_input("Confirmar senha", type="password")
         tipo_usuario = st.selectbox("Tipo de usuário", ["comum", "admin"])
+        email_usuario = st.text_input("E-mail")
 
         if st.button("Cadastrar usuário"):
-            if not novo_usuario or not nova_senha or not confirmar_senha:
+            if not novo_usuario or not nova_senha or not confirmar_senha or not email_usuario:
                 st.warning("Preencha todos os campos.")
                 return
 
@@ -31,8 +32,8 @@ def gerenciar_usuarios(conn):
                 else:
                     senha_hash = hash_password(nova_senha)
                     cursor.execute(
-                        "INSERT INTO usuarios (usuario, senha, tipo) VALUES (%s, %s, %s)",
-                        (novo_usuario, senha_hash, tipo_usuario)
+                        "INSERT INTO usuarios (usuario, senha, tipo, email) VALUES (%s, %s, %s, %s)",
+                        (novo_usuario, senha_hash, tipo_usuario, email_usuario)
                     )
                     conn.commit()
                     st.success(f"Usuário '{novo_usuario}' ({tipo_usuario}) cadastrado com sucesso!")
@@ -43,7 +44,7 @@ def gerenciar_usuarios(conn):
 
     elif acao == "Alterar ou excluir usuário":
         cursor = conn.cursor()
-        cursor.execute("SELECT id, usuario, tipo FROM usuarios ORDER BY usuario")
+        cursor.execute("SELECT id, usuario, tipo, email FROM usuarios ORDER BY usuario")
         usuarios = cursor.fetchall()
         cursor.close()
 
@@ -53,11 +54,12 @@ def gerenciar_usuarios(conn):
 
         nomes_formatados = [f"{u[1]} ({u[2]})" for u in usuarios]
         usuario_escolhido = st.selectbox("Selecionar usuário", nomes_formatados)
-        usuario_id, usuario_nome, usuario_tipo = usuarios[nomes_formatados.index(usuario_escolhido)]
+        usuario_id, usuario_nome, usuario_tipo, usuario_email = usuarios[nomes_formatados.index(usuario_escolhido)]
 
         novo_nome = st.text_input("Novo nome de usuário", value=usuario_nome)
         nova_senha = st.text_input("Nova senha (deixe em branco para não alterar)", type="password")
         novo_tipo = st.selectbox("Tipo de usuário", ["comum", "admin"], index=0 if usuario_tipo == "comum" else 1)
+        novo_email = st.text_input("Novo e-mail", value=usuario_email)
 
         col1, col2 = st.columns(2)
 
@@ -78,6 +80,10 @@ def gerenciar_usuarios(conn):
                 if novo_tipo != usuario_tipo:
                     atualizacoes.append("tipo = %s")
                     valores.append(novo_tipo)
+
+                if novo_email != usuario_email:
+                    atualizacoes.append("email = %s")
+                    valores.append(novo_email)
 
                 if atualizacoes:
                     valores.append(usuario_id)
@@ -116,15 +122,15 @@ def gerenciar_usuarios(conn):
 
                     # Verificações vinculadas
                     cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM conta_funcionarios WHERE id_usuario = %s", 
-                                   (st.session_state.usuario_id_excluir,))
+                                   (st.session_state.usuario_id_excluir,))  # Relacionado à conta
                     total_conta = cursor.fetchone()[0]
 
                     cursor.execute("SELECT COUNT(*) FROM faltas WHERE id_usuario = %s", 
-                                   (st.session_state.usuario_id_excluir,))
+                                   (st.session_state.usuario_id_excluir,))  # Relacionado à faltas
                     total_faltas = cursor.fetchone()[0]
 
                     cursor.execute("SELECT COUNT(*) FROM extras WHERE id_usuario = %s", 
-                                   (st.session_state.usuario_id_excluir,))
+                                   (st.session_state.usuario_id_excluir,))  # Relacionado à extras
                     total_extras = cursor.fetchone()[0]
 
                     st.markdown("---")
@@ -156,15 +162,15 @@ def gerenciar_usuarios(conn):
 
                         # Excluir dados vinculados
                         cursor.execute("DELETE FROM conta_funcionarios WHERE id_usuario = %s", 
-                                       (st.session_state.usuario_id_excluir,))
+                                       (st.session_state.usuario_id_excluir,))  # Excluir contas
                         cursor.execute("DELETE FROM faltas WHERE id_usuario = %s", 
-                                       (st.session_state.usuario_id_excluir,))
+                                       (st.session_state.usuario_id_excluir,))  # Excluir faltas
                         cursor.execute("DELETE FROM extras WHERE id_usuario = %s", 
-                                       (st.session_state.usuario_id_excluir,))
+                                       (st.session_state.usuario_id_excluir,))  # Excluir extras
 
                         # Excluir usuário
                         cursor.execute("DELETE FROM usuarios WHERE id = %s", 
-                                       (st.session_state.usuario_id_excluir,))
+                                       (st.session_state.usuario_id_excluir,))  # Excluir do sistema
                         conn.commit()
                         st.success("✅ Usuário e todos os dados vinculados foram excluídos com sucesso.")
                     except Exception as e:
@@ -181,4 +187,5 @@ def gerenciar_usuarios(conn):
                     st.session_state.confirmar_exclusao_usuario = False
                     st.session_state.usuario_id_excluir = None
                     st.rerun()
+
 

@@ -13,6 +13,7 @@ from modules.ver_alterar import ver_e_alterar_telas_por_data
 from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
 from components.ver_conta_funcionario import ver_conta_funcionario
 from modules.cadastrar import gerenciar_usuarios
+from modules.Reiniciar_Senha import mostrar_redefinir_senha
 from streamlit_cookies_manager import EncryptedCookieManager
 
 # --- Inicialização de Cookies ---
@@ -25,13 +26,16 @@ cookies = EncryptedCookieManager(prefix="meuapp/", password=cookie_password)
 if not cookies.ready():
     st.stop()
 
+# --- Verificar se é link de redefinição ---
+if "token" in st.query_params:
+    mostrar_redefinir_senha()
+    st.stop()
+
 # --- Inicializar sessão ---
 st.session_state.setdefault("logado", False)
 st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("pagina", "Home")
 st.session_state.setdefault("usuario_tipo", "comum")
-
-# Variável para controlar visibilidade do menu
 if "menu_visivel" not in st.session_state:
     st.session_state.menu_visivel = False  # começa escondido
 
@@ -117,7 +121,6 @@ if st.session_state.menu_visivel:
 # --- Página inicial ou selecionada ---
 pagina = st.session_state.get("pagina", "Home")
 
-# ✅ TÍTULO SOMENTE NA HOME
 if pagina == "Home":
     st.markdown("## 🍞 Sistema da softMASSA")
     st.success(f"Bem-vindo, {st.session_state['usuario']}!")

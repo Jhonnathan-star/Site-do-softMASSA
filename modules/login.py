@@ -52,7 +52,7 @@ def login_usuario(conn, cookies):
 
                     token = gerar_token_recuperacao(usuario_id, conn)
 
-                    # 🔗 Altere para seu domínio real:
+                    # 🔗 
                     link = f"https://site-do-softmassa-evoj9v7l97aat9i6fptryx.streamlit.app/Reiniciar_Senha?token={token}"
 
                     enviar_email(email_destino, link)
@@ -87,7 +87,6 @@ def login_usuario(conn, cookies):
                 st.error("Senha incorreta.")
         else:
             st.error("Usuário não encontrado.")
-
 
 
 def logout(conn, cookies):
