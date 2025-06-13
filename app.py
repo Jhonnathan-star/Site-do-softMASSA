@@ -3,6 +3,14 @@ import streamlit as st
 # --- Configuração da página ---
 st.set_page_config(page_title="softMASSA", layout="centered")
 
+# --- Verificar se é link de redefinição de senha ---
+query_params = st.experimental_get_query_params()
+if "token" in query_params:
+    from modules.Reiniciar_Senha import mostrar_redefinir_senha
+    mostrar_redefinir_senha()
+    st.stop()
+
+# --- Imports restantes ---
 import os
 from database.connection import conectar
 from modules.login import main as login_main, marcar_token_expirado
@@ -13,7 +21,6 @@ from modules.ver_alterar import ver_e_alterar_telas_por_data
 from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
 from components.ver_conta_funcionario import ver_conta_funcionario
 from modules.cadastrar import gerenciar_usuarios
-from modules.Reiniciar_Senha import mostrar_redefinir_senha
 from streamlit_cookies_manager import EncryptedCookieManager
 
 # --- Inicialização de Cookies ---
@@ -24,11 +31,6 @@ if not cookie_password:
 
 cookies = EncryptedCookieManager(prefix="meuapp/", password=cookie_password)
 if not cookies.ready():
-    st.stop()
-
-# --- Verificar se é link de redefinição ---
-if "token" in st.query_params:
-    mostrar_redefinir_senha()
     st.stop()
 
 # --- Inicializar sessão ---
@@ -152,4 +154,3 @@ elif pagina == "Ver conta do funcionário":
 
 elif pagina == "Gerenciar usuários":
     executar_pagina(gerenciar_usuarios)
-
