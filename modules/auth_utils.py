@@ -43,3 +43,25 @@ def marcar_token_expirado(token: str, conn):
     cursor.execute("UPDATE sessao_tokens SET expirado = TRUE WHERE token = %s", (token,))
     conn.commit()
     cursor.close()
+from datetime import datetime, timedelta
+import secrets
+
+def gerar_token_recuperacao(usuario_id, conn):
+    token = secrets.token_urlsafe(32)
+    expira_em = datetime.now() + timedelta(hours=1)
+
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO tokens_recuperacao (usuario_id, token, expira_em)
+        VALUES (%s, %s, %s)
+    """, (usuario_id, token, expira_em))
+    conn.commit()
+    cursor.close()
+    return token
+
+def obter_usuario_por_nome(conn, usuario: str):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, senha, tipo FROM usuarios WHERE usuario = %s", (usuario,))
+    resultado = cursor.fetchone()
+    cursor.close()
+    return resultado

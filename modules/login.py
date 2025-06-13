@@ -16,11 +16,52 @@ def obter_nome_usuario_por_id(usuario_id: int, conn):
     cursor.close()
     return resultado[0] if resultado else None
 
+import streamlit as st
+from modules.auth_utils import (
+    check_password, salvar_token, validar_token, marcar_token_expirado,
+    obter_usuario_por_nome, gerar_token_recuperacao
+)
+from modules.email import enviar_email
+
 def login_usuario(conn, cookies):
     st.subheader("Login")
     usuario = st.text_input("Usuário", key="login_usuario")
     senha = st.text_input("Senha", type="password", key="login_senha")
 
+    esqueceu_senha = st.checkbox("Esqueci minha senha", key="checkbox_esqueci_senha")
+
+    if esqueceu_senha:
+        st.info("Digite seu nome de usuário para receber instruções de recuperação.")
+        usuario_recuperar = st.text_input("Usuário para recuperação", key="recuperar_usuario")
+
+        if st.button("Enviar instruções de recuperação", key="botao_recuperar"):
+            if not usuario_recuperar:
+                st.warning("Por favor, digite o nome de usuário.")
+            else:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, email FROM usuarios WHERE usuario = %s", (usuario_recuperar,))
+                resultado = cursor.fetchone()
+                cursor.close()
+
+                if resultado:
+                    usuario_id, email_destino = resultado
+
+                    if not email_destino:
+                        st.error("Usuário não possui e-mail cadastrado.")
+                        return
+
+                    token = gerar_token_recuperacao(usuario_id, conn)
+
+                    # 🔗 Altere para seu domínio real:
+                    link = f"https://site-do-softmassa-evoj9v7l97aat9i6fptryx.streamlit.app/Reiniciar_Senha?token={token}"
+
+                    enviar_email(email_destino, link)
+                    st.success("✅ Instruções de recuperação foram enviadas para seu e-mail.")
+                else:
+                    st.error("Usuário não encontrado.")
+        return
+
+    # Login normal:
     if st.button("Entrar", key="botao_entrar"):
         if not usuario or not senha:
             st.warning("Preencha usuário e senha.")
@@ -46,6 +87,8 @@ def login_usuario(conn, cookies):
                 st.error("Senha incorreta.")
         else:
             st.error("Usuário não encontrado.")
+
+
 
 def logout(conn, cookies):
     if 'token' in st.session_state:
