@@ -7,6 +7,8 @@ def inserir_pedidos_automatizado(conn):
 
     st.header("Inserir Pedidos Automatizados")
 
+    valor_pacote = st.number_input("Valor do pacote (R$)", min_value=0.0, step=1.0, value=62.0)
+
     tipo_pao_grossa = st.selectbox("Qual tipo de grossa?", options=["G3", "G4"])
     tipo_pao_fina = st.selectbox("Qual tipo de fina?", options=["F3", "F4"])
 
@@ -70,7 +72,7 @@ def inserir_pedidos_automatizado(conn):
                 turno_atual = "manhã"
                 data_atual += timedelta(days=1)
 
-        valor_total = (total_grossa + total_fina) * 62  # valor do pacote
+        valor_total = (total_grossa + total_fina) * valor_pacote
 
         # Armazena para exibição e inserção
         st.session_state['resultados'] = resultados
@@ -80,6 +82,7 @@ def inserir_pedidos_automatizado(conn):
         st.session_state['data_inicio'] = data_inicio
         st.session_state['tipo_pao_grossa'] = tipo_pao_grossa
         st.session_state['tipo_pao_fina'] = tipo_pao_fina
+        st.session_state['valor_pacote'] = valor_pacote
 
     # Exibir resultados
     if 'resultados' in st.session_state:
@@ -97,7 +100,7 @@ def inserir_pedidos_automatizado(conn):
 
         if inserir == "Sim":
             insert_query = """
-                INSERT INTO pedidos (`Data`, `Grossa (PCT)`, `Fina (PCT)`, `Valor R$`)
+                INSERT INTO pedidos (Data, `Grossa (PCT)`, `Fina (PCT)`, `Valor R$`)
                 VALUES (%s, %s, %s, %s)
             """
             cursor.execute(insert_query, (
@@ -109,8 +112,7 @@ def inserir_pedidos_automatizado(conn):
             conn.commit()
             st.success(f"Dados inseridos na tabela 'pedidos'. Valor total: R$ {st.session_state['valor_total']:.2f}")
 
-            # Limpa session_state
-            for key in ['resultados', 'total_grossa', 'total_fina', 'valor_total', 'data_inicio', 'tipo_pao_grossa', 'tipo_pao_fina']:
+            for key in ['resultados', 'total_grossa', 'total_fina', 'valor_total', 'data_inicio', 'tipo_pao_grossa', 'tipo_pao_fina', 'valor_pacote']:
                 del st.session_state[key]
 
     cursor.close()
@@ -119,6 +121,8 @@ def inserir_pedidos_manual(conn):
     cursor = conn.cursor()
 
     st.header("Inserir previsão manual de pedidos")
+
+    valor_pacote = st.number_input("Valor do pacote (R$)", min_value=0.0, step=1.0, value=62.0)
 
     data = st.date_input("Data da previsão")
 
@@ -144,15 +148,15 @@ def inserir_pedidos_manual(conn):
         st.write(f"**Total de pacotes de {tipo_pao_grossa} (grossa):** {pacotes_grossa} pct")
         st.write(f"**Total de pacotes de {tipo_pao_fina} (fina):** {pacotes_fina} pct")
 
-        valor_total = (pacotes_grossa + pacotes_fina) * 62 # Valor do pct de massa
+        valor_total = (pacotes_grossa + pacotes_fina) * valor_pacote
         st.write(f"**Valor total estimado:** R$ {valor_total:.2f}")
 
-        # Guardar o valor para inserção em session_state para persistir
         st.session_state['inserir_valores'] = {
             "data": str(data),
             "pacotes_grossa": pacotes_grossa,
             "pacotes_fina": pacotes_fina,
-            "valor_total": valor_total
+            "valor_total": valor_total,
+            "valor_pacote": valor_pacote
         }
 
     if 'inserir_valores' in st.session_state:
@@ -161,13 +165,12 @@ def inserir_pedidos_manual(conn):
             try:
                 vals = st.session_state['inserir_valores']
                 insert_query = """
-                    INSERT INTO pedidos (`Data`, `Grossa (PCT)`, `Fina (PCT)`, `Valor R$`)
+                    INSERT INTO pedidos (Data, `Grossa (PCT)`, `Fina (PCT)`, `Valor R$`)
                     VALUES (%s, %s, %s, %s)
                 """
                 cursor.execute(insert_query, (vals["data"], vals["pacotes_grossa"], vals["pacotes_fina"], vals["valor_total"]))
                 conn.commit()
                 st.success(f"Dados inseridos na tabela 'pedidos'. Valor total: R$ {vals['valor_total']:.2f}")
-                # Limpar sessão para evitar reinserção
                 del st.session_state['inserir_valores']
             except Exception as e:
                 st.error(f"Erro ao inserir no banco: {e}")
