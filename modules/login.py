@@ -46,21 +46,18 @@ def login_usuario(conn, cookies):
                 if resultado:
                     usuario_id, email_destino = resultado
 
-                    if not email_destino:
-                        st.error("Usuário não possui e-mail cadastrado.")
+                    if not email_destino or email_destino.strip() == "":
+                        st.error(f"{usuario_recuperar}, você não tem e-mail cadastrado. Entre em contato com o administrador.")
                         return
 
                     token = gerar_token_recuperacao(usuario_id, conn)
 
-                    # 🔗 
                     link = f"https://site-do-softmassa-evoj9v7l97aat9i6fptryx.streamlit.app/?token={token}"
-
 
                     enviar_email(email_destino, link)
                     st.success("✅ Instruções de recuperação foram enviadas para seu e-mail.")
                 else:
                     st.error("Usuário não encontrado.")
-        return
 
     # Login normal:
     if st.button("Entrar", key="botao_entrar"):

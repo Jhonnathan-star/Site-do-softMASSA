@@ -11,21 +11,24 @@ def inserir_pedidos_automatizado(conn):
     tipo_pao_fina = st.selectbox("Qual tipo de fina?", options=["F3", "F4"])
 
     data_inicio = st.date_input("Data início")
+    turno_inicio = st.selectbox("Turno início", options=["manhã", "tarde"])
+    
     data_fim = st.date_input("Data fim")
+    turno_fim = st.selectbox("Turno fim", options=["manhã", "tarde"])
 
-    # Botão para calcular a previsão
     if st.button("Calcular previsão"):
-        if data_fim < data_inicio:
-            st.error("Data fim deve ser maior ou igual à data início.")
+        if (data_fim < data_inicio) or (data_fim == data_inicio and turno_fim == "manhã" and turno_inicio == "tarde"):
+            st.error("Data/turno fim deve ser maior ou igual à data/turno início.")
             return
 
-        dias = (data_fim - data_inicio).days + 1
         resultados = []
         total_grossa = 0
         total_fina = 0
 
-        for i in range(dias):
-            data_atual = data_inicio + timedelta(days=i)
+        data_atual = data_inicio
+        turno_atual = turno_inicio
+
+        while True:
             query = """
                 SELECT telas_grossa_manha, telas_grossa_tarde, telas_fina_manha, telas_fina_tarde
                 FROM telas
@@ -35,24 +38,41 @@ def inserir_pedidos_automatizado(conn):
             resultado = cursor.fetchone()
 
             if resultado:
-                telas_grossa_manha = resultado['telas_grossa_manha'] or 0
-                telas_grossa_tarde = resultado['telas_grossa_tarde'] or 0
-                telas_fina_manha = resultado['telas_fina_manha'] or 0
-                telas_fina_tarde = resultado['telas_fina_tarde'] or 0
-
-                pacotes_grossa = calcular_pacotes(telas_grossa_manha, tipo_pao_grossa) + calcular_pacotes(telas_grossa_tarde, tipo_pao_grossa)
-                pacotes_fina = calcular_pacotes(telas_fina_manha, tipo_pao_fina) + calcular_pacotes(telas_fina_tarde, tipo_pao_fina)
+                g_manha = resultado['telas_grossa_manha'] or 0
+                g_tarde = resultado['telas_grossa_tarde'] or 0
+                f_manha = resultado['telas_fina_manha'] or 0
+                f_tarde = resultado['telas_fina_tarde'] or 0
             else:
-                pacotes_grossa = 0
-                pacotes_fina = 0
+                g_manha = g_tarde = f_manha = f_tarde = 0
 
-            resultados.append((data_atual, pacotes_grossa, pacotes_fina))
+            pacotes_grossa = 0
+            pacotes_fina = 0
+
+            if turno_atual == "manhã":
+                pacotes_grossa = calcular_pacotes(g_manha, tipo_pao_grossa)
+                pacotes_fina = calcular_pacotes(f_manha, tipo_pao_fina)
+            elif turno_atual == "tarde":
+                pacotes_grossa = calcular_pacotes(g_tarde, tipo_pao_grossa)
+                pacotes_fina = calcular_pacotes(f_tarde, tipo_pao_fina)
+
+            resultados.append((data_atual, turno_atual, pacotes_grossa, pacotes_fina))
             total_grossa += pacotes_grossa
             total_fina += pacotes_fina
 
-        valor_total = (total_grossa + total_fina) * 62 # Valor do pct
+            # Verifica se chegou no fim
+            if data_atual == data_fim and turno_atual == turno_fim:
+                break
 
-        # Armazena no session_state para persistência
+            # Avança o turno
+            if turno_atual == "manhã":
+                turno_atual = "tarde"
+            else:
+                turno_atual = "manhã"
+                data_atual += timedelta(days=1)
+
+        valor_total = (total_grossa + total_fina) * 62  # valor do pacote
+
+        # Armazena para exibição e inserção
         st.session_state['resultados'] = resultados
         st.session_state['total_grossa'] = total_grossa
         st.session_state['total_fina'] = total_fina
@@ -61,12 +81,12 @@ def inserir_pedidos_automatizado(conn):
         st.session_state['tipo_pao_grossa'] = tipo_pao_grossa
         st.session_state['tipo_pao_fina'] = tipo_pao_fina
 
-    # Mostrar resultados se já calculados
+    # Exibir resultados
     if 'resultados' in st.session_state:
-        st.subheader("Previsão por dia")
+        st.subheader("Previsão por dia e turno")
         st.write("---")
-        for data_atual, pct_grossa, pct_fina in st.session_state['resultados']:
-            st.write(f"{data_atual}: Grossa: {pct_grossa} pct | Fina: {pct_fina} pct")
+        for data_, turno_, pct_grossa, pct_fina in st.session_state['resultados']:
+            st.write(f"{data_} - {turno_}: Grossa: {pct_grossa} pct | Fina: {pct_fina} pct")
 
         st.write("---")
         st.write(f"**Total de pacotes de {st.session_state['tipo_pao_grossa']} (grossa):** {st.session_state['total_grossa']} pct")
@@ -89,22 +109,11 @@ def inserir_pedidos_automatizado(conn):
             conn.commit()
             st.success(f"Dados inseridos na tabela 'pedidos'. Valor total: R$ {st.session_state['valor_total']:.2f}")
 
-            # Limpa o session_state para evitar múltiplas inserções acidentais
+            # Limpa session_state
             for key in ['resultados', 'total_grossa', 'total_fina', 'valor_total', 'data_inicio', 'tipo_pao_grossa', 'tipo_pao_fina']:
                 del st.session_state[key]
 
     cursor.close()
-
-import streamlit as st
-from datetime import datetime, timedelta
-from utils.calculos import calcular_pacotes
-
-import streamlit as st
-from datetime import datetime, timedelta
-from utils.calculos import calcular_pacotes  # Certifique-se que está importado
-
-import streamlit as st
-from datetime import timedelta
 
 def inserir_pedidos_manual(conn):
     cursor = conn.cursor()
