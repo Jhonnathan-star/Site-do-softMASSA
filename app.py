@@ -4,7 +4,7 @@ import streamlit as st
 st.set_page_config(page_title="softMASSA", layout="centered")
 
 # --- Verificar se é link de redefinição de senha ---
-query_params = st.experimental_get_query_params()
+query_params = st.query_params
 if "token" in query_params:
     from modules.Reiniciar_Senha import mostrar_redefinir_senha
     mostrar_redefinir_senha()
