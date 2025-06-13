@@ -21,19 +21,29 @@ def visualizar_faltas(conn, id_usuario, nome_usuario, tipo_usuario):
     if tipo_usuario != "admin":
         return
 
+    # Inicializar valores no session_state se ainda não existirem
+    if "falta_data" not in st.session_state:
+        st.session_state["falta_data"] = date.today()
+    if "falta_motivo" not in st.session_state:
+        st.session_state["falta_motivo"] = ""
+
     # Adicionar nova falta
     st.markdown("### ➕ Registrar nova falta")
-    nova_data = st.date_input("Data da falta", value=date.today(), key="falta_data")
+    nova_data = st.date_input("Data da falta", key="falta_data")
     novo_motivo = st.text_input("Motivo", key="falta_motivo")
 
     if st.button("Registrar falta"):
-        if novo_motivo:
+        if novo_motivo.strip():
             cursor.execute(
                 "INSERT INTO faltas (id_usuario, data, motivo) VALUES (%s, %s, %s)",
-                (id_usuario, nova_data, novo_motivo)
+                (id_usuario, nova_data, novo_motivo.strip())
             )
             conn.commit()
             st.success("✅ Falta registrada com sucesso!")
+
+            # Resetar campos removendo as chaves antes do rerun
+            del st.session_state["falta_data"]
+            del st.session_state["falta_motivo"]
             st.rerun()
         else:
             st.warning("⚠️ Motivo não pode estar em branco.")
@@ -48,27 +58,69 @@ def visualizar_faltas(conn, id_usuario, nome_usuario, tipo_usuario):
             idx = opcoes.index(falta_sel)
             falta = df.iloc[idx]
 
-            nova_data = st.date_input("Nova data", value=pd.to_datetime(falta["Data"]).date(), key="editar_falta_data")
-            novo_motivo = st.text_input("Novo motivo", value=falta["Motivo"], key="editar_falta_motivo")
+            # Inicializar os valores de edição no session_state se não existirem
+            if "editar_falta_data" not in st.session_state:
+                st.session_state["editar_falta_data"] = pd.to_datetime(falta["Data"]).date()
+            if "editar_falta_motivo" not in st.session_state:
+                st.session_state["editar_falta_motivo"] = falta["Motivo"]
+
+            nova_data = st.date_input("Nova data", key="editar_falta_data")
+            novo_motivo = st.text_input("Novo motivo", key="editar_falta_motivo")
 
             col1, col2 = st.columns(2)
             if col1.button("Salvar alteração na falta"):
                 cursor.execute(
                     "UPDATE faltas SET data = %s, motivo = %s WHERE id = %s",
-                    (nova_data, novo_motivo, int(falta["ID"]))
+                    (nova_data, novo_motivo.strip(), int(falta["ID"]))
                 )
                 conn.commit()
                 st.success("✅ Falta atualizada com sucesso!")
+
+                # Resetar os campos de edição para evitar conflito no próximo loop
+                del st.session_state["editar_falta_data"]
+                del st.session_state["editar_falta_motivo"]
                 st.rerun()
 
-            if col2.button("🗑️ Excluir esta falta"):
-                cursor.execute("DELETE FROM faltas WHERE id = %s", (int(falta["ID"]),))
-                conn.commit()
-                st.warning("❌ Falta excluída com sucesso!")
-                st.rerun()
+            # Confirmação para excluir esta falta
+            if "confirmar_excluir_falta" not in st.session_state:
+                st.session_state.confirmar_excluir_falta = False
 
-    if st.button("🧨 Excluir todas as faltas deste funcionário"):
-        cursor.execute("DELETE FROM faltas WHERE id_usuario = %s", (id_usuario,))
-        conn.commit()
-        st.warning("❌ Todas as faltas deste funcionário foram excluídas.")
-        st.rerun()
+            if not st.session_state.confirmar_excluir_falta:
+                if col2.button("🗑️ Excluir esta falta"):
+                    st.session_state.id_falta_excluir = int(falta["ID"])
+                    st.session_state.confirmar_excluir_falta = True
+
+            if st.session_state.confirmar_excluir_falta:
+                st.warning("⚠️ Deseja realmente excluir esta falta?")
+                col3, col4 = st.columns(2)
+                if col3.button("✅ Sim, excluir falta"):
+                    cursor.execute("DELETE FROM faltas WHERE id = %s", (st.session_state.id_falta_excluir,))
+                    conn.commit()
+                    st.session_state.confirmar_excluir_falta = False
+                    st.success("❌ Falta excluída com sucesso!")
+                    st.experimental_rerun()
+                if col4.button("❌ Não, cancelar exclusão"):
+                    st.session_state.confirmar_excluir_falta = False
+                    st.rerun()
+
+    # Confirmação para excluir todas as faltas
+    if "confirmar_excluir_todas" not in st.session_state:
+        st.session_state.confirmar_excluir_todas = False
+
+    st.markdown("---")
+    if not st.session_state.confirmar_excluir_todas:
+        if st.button("🧨 Excluir todas as faltas deste funcionário"):
+            st.session_state.confirmar_excluir_todas = True
+
+    if st.session_state.confirmar_excluir_todas:
+        st.warning("⚠️ Deseja realmente excluir todas as faltas deste funcionário?")
+        col5, col6 = st.columns(2)
+        if col5.button("✅ Sim, excluir todas"):
+            cursor.execute("DELETE FROM faltas WHERE id_usuario = %s", (id_usuario,))
+            conn.commit()
+            st.session_state.confirmar_excluir_todas = False
+            st.warning("❌ Todas as faltas foram excluídas.")
+            st.rerun()
+        if col6.button("❌ Não, cancelar"):
+            st.session_state.confirmar_excluir_todas = False
+            st.rerun()

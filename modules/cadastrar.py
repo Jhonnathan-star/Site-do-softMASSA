@@ -21,21 +21,25 @@ def gerenciar_usuarios(conn):
                 st.error("As senhas não coincidem.")
                 return
 
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = %s", (novo_usuario,))
-            existe = cursor.fetchone()[0]
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = %s", (novo_usuario,))
+                existe = cursor.fetchone()[0]
 
-            if existe:
-                st.error("Usuário já existe.")
-            else:
-                senha_hash = hash_password(nova_senha)
-                cursor.execute(
-                    "INSERT INTO usuarios (usuario, senha, tipo) VALUES (%s, %s, %s)",
-                    (novo_usuario, senha_hash, tipo_usuario)
-                )
-                conn.commit()
-                st.success(f"Usuário '{novo_usuario}' ({tipo_usuario}) cadastrado com sucesso!")
-            cursor.close()
+                if existe:
+                    st.error("Usuário já existe.")
+                else:
+                    senha_hash = hash_password(nova_senha)
+                    cursor.execute(
+                        "INSERT INTO usuarios (usuario, senha, tipo) VALUES (%s, %s, %s)",
+                        (novo_usuario, senha_hash, tipo_usuario)
+                    )
+                    conn.commit()
+                    st.success(f"Usuário '{novo_usuario}' ({tipo_usuario}) cadastrado com sucesso!")
+            except Exception as e:
+                st.error(f"Erro ao cadastrar usuário: {e}")
+            finally:
+                cursor.close()
 
     elif acao == "Alterar ou excluir usuário":
         cursor = conn.cursor()
@@ -77,58 +81,91 @@ def gerenciar_usuarios(conn):
 
                 if atualizacoes:
                     valores.append(usuario_id)
-                    query = f"UPDATE usuarios SET {', '.join(atualizacoes)} WHERE id = %s"
-                    cursor = conn.cursor()
-                    cursor.execute(query, tuple(valores))
-                    conn.commit()
-                    cursor.close()
-                    st.success("Usuário atualizado com sucesso.")
+                    try:
+                        cursor = conn.cursor()
+                        query = f"UPDATE usuarios SET {', '.join(atualizacoes)} WHERE id = %s"
+                        cursor.execute(query, tuple(valores))
+                        conn.commit()
+                        st.success("Usuário atualizado com sucesso.")
+                    except Exception as e:
+                        st.error(f"Erro ao atualizar: {e}")
+                    finally:
+                        cursor.close()
                     st.rerun()
                 else:
                     st.info("Nenhuma alteração feita.")
 
         with col2:
-            if st.button("Excluir usuário"):
-                if st.session_state.get("usuario_id") == usuario_id:
-                    st.error("❌ Você não pode excluir o próprio usuário logado.")
-                    return
+            # Estados de confirmação
+            if "confirmar_exclusao_usuario" not in st.session_state:
+                st.session_state.confirmar_exclusao_usuario = False
+            if "usuario_id_excluir" not in st.session_state:
+                st.session_state.usuario_id_excluir = None
 
-                cursor = conn.cursor()
-                # Verifica dependências
-                cursor.execute("SELECT COUNT(*) FROM conta_funcionarios WHERE id_usuario = %s", (usuario_id,))
-                vinculos = cursor.fetchone()[0]
-
-                if vinculos > 0:
-                    st.warning("⚠️ Este usuário possui dados vinculados (ex: conta_funcionarios).")
-                    confirmar = st.radio(
-                        "Deseja excluir mesmo assim? Isso irá apagar os dados associados.",
-                        ["Não", "Sim"],
-                        index=0,
-                        key="confirmar_exclusao_usuario"
-                    )
-                    if confirmar == "Sim":
-                        try:
-                            cursor.execute("DELETE FROM conta_funcionarios WHERE id_usuario = %s", (usuario_id,))
-                            cursor.execute("DELETE FROM usuarios WHERE id = %s", (usuario_id,))
-                            conn.commit()
-                            st.success("✅ Usuário e dados associados excluídos com sucesso.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Erro ao excluir: {e}")
-                        finally:
-                            cursor.close()
+            if not st.session_state.confirmar_exclusao_usuario:
+                if st.button("Excluir usuário"):
+                    if st.session_state.get("usuario_id") == usuario_id:
+                        st.error("❌ Você não pode excluir o próprio usuário logado.")
                     else:
-                        st.info("Operação cancelada.")
-                        cursor.close()
-                else:
-                    try:
-                        cursor.execute("DELETE FROM usuarios WHERE id = %s", (usuario_id,))
-                        conn.commit()
-                        st.success("✅ Usuário excluído com sucesso.")
+                        st.session_state.confirmar_exclusao_usuario = True
+                        st.session_state.usuario_id_excluir = usuario_id
+                        st.session_state.usuario_nome_excluir = usuario_nome
                         st.rerun()
+            else:
+                # Buscar vínculos antes de excluir
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM conta_funcionarios WHERE id_usuario = %s", 
+                                   (st.session_state.usuario_id_excluir,))
+                    total_conta = cursor.fetchone()[0]
+
+                    cursor.execute("SELECT COUNT(*) FROM faltas WHERE id_usuario = %s", 
+                                   (st.session_state.usuario_id_excluir,))
+                    total_faltas = cursor.fetchone()[0]
+
+                    st.markdown("---")
+                    st.warning(f"⚠️ Deseja realmente excluir o usuário **{st.session_state.usuario_nome_excluir}**?")
+                    
+                    if total_conta > 0:
+                        st.info(f"💵 Este usuário possui **R$ {total_conta:.2f}** em registros de gastos.")
+                    else:
+                        st.info("💵 Nenhum gasto registrado.")
+
+                    if total_faltas > 0:
+                        st.info(f"📋 Este usuário possui **{total_faltas} falta(s)** registrada(s).")
+                    else:
+                        st.info("📋 Nenhuma falta registrada.")
+                except Exception as e:
+                    st.error(f"Erro ao verificar dados vinculados: {e}")
+                finally:
+                    cursor.close()
+
+                col3, col4 = st.columns(2)
+                if col3.button("✅ Sim, excluir"):
+                    try:
+                        cursor = conn.cursor()
+
+                        # Exclui dados vinculados
+                        cursor.execute("DELETE FROM conta_funcionarios WHERE id_usuario = %s", 
+                                       (st.session_state.usuario_id_excluir,))
+                        cursor.execute("DELETE FROM faltas WHERE id_usuario = %s", 
+                                       (st.session_state.usuario_id_excluir,))
+
+                        # Exclui usuário
+                        cursor.execute("DELETE FROM usuarios WHERE id = %s", 
+                                       (st.session_state.usuario_id_excluir,))
+                        conn.commit()
+                        st.success("✅ Usuário e todos os dados vinculados foram excluídos com sucesso.")
                     except Exception as e:
                         st.error(f"Erro ao excluir: {e}")
                     finally:
                         cursor.close()
 
+                    st.session_state.confirmar_exclusao_usuario = False
+                    st.session_state.usuario_id_excluir = None
+                    st.rerun()
 
+                if col4.button("❌ Não, cancelar"):
+                    st.session_state.confirmar_exclusao_usuario = False
+                    st.session_state.usuario_id_excluir = None
+                    st.rerun()
