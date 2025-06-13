@@ -53,7 +53,8 @@ def login_usuario(conn, cookies):
                     token = gerar_token_recuperacao(usuario_id, conn)
 
                     # 🔗 
-                    link = f"https://site-do-softmassa-evoj9v7l97aat9i6fptryx.streamlit.app/Reiniciar_Senha?token={token}"
+                    link = f"https://site-do-softmassa-evoj9v7l97aat9i6fptryx.streamlit.app/?token={token}"
+
 
                     enviar_email(email_destino, link)
                     st.success("✅ Instruções de recuperação foram enviadas para seu e-mail.")
