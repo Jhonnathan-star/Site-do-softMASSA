@@ -1,11 +1,16 @@
+import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import streamlit as st
 
 def enviar_email(destinatario, link_recuperacao):
-    remetente = "softmassa25@gmail.com"
-    senha = "vzbd ivib coka jcev"  # Crie uma senha de app no Gmail
+    remetente = os.getenv("EMAIL_REMETENTE")
+    senha = os.getenv("EMAIL_SENHA")
+
+    if not remetente or not senha:
+        st.error("Erro: Variáveis de e-mail não configuradas.")
+        return
 
     assunto = "Redefinição de senha"
     corpo = f"Olá,\n\nClique no link abaixo para redefinir sua senha:\n{link_recuperacao}\n\nSe você não solicitou isso, ignore esta mensagem."
