@@ -9,11 +9,16 @@ def enviar_email(destinatario, link_recuperacao):
     senha = os.getenv("EMAIL_SENHA")
 
     if not remetente or not senha:
-        st.error("Erro: Variáveis de e-mail não configuradas.")
+        st.error("❌ Variáveis de ambiente para e-mail não configuradas.")
         return
 
     assunto = "Redefinição de senha"
-    corpo = f"Olá,\n\nClique no link abaixo para redefinir sua senha:\n{link_recuperacao}\n\nSe você não solicitou isso, ignore esta mensagem."
+    corpo = f"""Olá,
+
+Clique no link abaixo para redefinir sua senha:
+{link_recuperacao}
+
+Se você não solicitou isso, ignore esta mensagem."""
 
     msg = MIMEMultipart()
     msg["From"] = remetente
@@ -26,8 +31,10 @@ def enviar_email(destinatario, link_recuperacao):
             server.starttls()
             server.login(remetente, senha)
             server.sendmail(remetente, destinatario, msg.as_string())
+        st.success("✅ E-mail enviado com sucesso.")
     except Exception as e:
-        st.error(f"Erro ao enviar e-mail: {e}")
+        st.error("❌ Erro ao enviar e-mail.")
+        st.exception(e)
 
 def obter_usuario_com_email(conn, usuario: str):
     cursor = conn.cursor()
