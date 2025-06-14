@@ -32,9 +32,9 @@ def buscar_historico_por_data(conn):
     elif modo == "Consulta por intervalo de datas":
         col1, col2 = st.columns(2)
         with col1:
-            data_ini = st.date_input("📅 Data inicial", format="YYYY-MM-DD")
+            data_ini = st.date_input("🗕️ Data inicial", format="YYYY-MM-DD")
         with col2:
-            data_fim = st.date_input("📅 Data final", format="YYYY-MM-DD")
+            data_fim = st.date_input("🗕️ Data final", format="YYYY-MM-DD")
 
         if st.button("Buscar intervalo"):
             if data_ini > data_fim:
@@ -72,9 +72,8 @@ def mostrar_historico_para_datas(conn, datas):
             continue
 
         primeira = resultados[0]
-        st.markdown(f"### 📅 Resumo do dia {primeira[1]} - Semana {primeira[2]}")
+        st.markdown(f"### 🗓️ Resumo do dia {primeira[1]} - Semana {primeira[2]}")
 
-        # Valores de telas colocadas
         colocadas_dict = {
             ("grossa", "manha"): primeira[3],
             ("grossa", "tarde"): primeira[4],
@@ -82,7 +81,6 @@ def mostrar_historico_para_datas(conn, datas):
             ("fina", "tarde"): primeira[6]
         }
 
-        # Criar dicionário com dados de horários
         horarios_map = {}
         for row in resultados:
             tipo = row[7]
@@ -95,7 +93,6 @@ def mostrar_historico_para_datas(conn, datas):
                     "vendida": vendida
                 }
 
-        # Ordem fixa
         ordem_fixa = [
             ("grossa", "manha"),
             ("grossa", "tarde"),
@@ -123,20 +120,10 @@ def mostrar_historico_para_datas(conn, datas):
 
     cursor.close()
 
-from datetime import datetime, time, timedelta
-import streamlit as st
-
-def timedelta_para_time(td):
-    total_segundos = int(td.total_seconds())
-    horas = total_segundos // 3600
-    minutos = (total_segundos % 3600) // 60
-    segundos = total_segundos % 60
-    return time(horas, minutos, segundos)
-
 def inserir_horarios_separados_front(conn):
     st.title("Registro de Horários dos Pães")
 
-    data = st.date_input("\U0001F4C5 Selecione a data para registrar os horários")
+    data = st.date_input("📅 Selecione a data para registrar os horários")
     if not data:
         return
 
@@ -157,7 +144,7 @@ def inserir_horarios_separados_front(conn):
     id_telas, grossa_manha, grossa_tarde, fina_manha, fina_tarde = resultado
     st.success(f"✅ Data encontrada: {data_str} (ID: {id_telas})")
 
-    turno = st.radio("\U0001F552 Selecione o turno", ["manha", "tarde"])
+    turno = st.radio("🕒 Selecione o turno", ["manha", "tarde"])
     valor_grossa = grossa_manha if turno == "manha" else grossa_tarde
     valor_fina = fina_manha if turno == "manha" else fina_tarde
 
@@ -173,7 +160,7 @@ def inserir_horarios_separados_front(conn):
     valores = {}
 
     editando = bool(registros)
-    st.subheader(f"{'\U0001F4DD Editar' if editando else '🆕 Inserir'} Horários - Turno da {turno}")
+    st.subheader(f"{'📍 Editar' if editando else '🆕 Inserir'} Horários - Turno da {turno}")
 
     for tipo in tipos_pao:
         reg = next((r for r in registros if r[1] == tipo), None)
@@ -182,12 +169,19 @@ def inserir_horarios_separados_front(conn):
         if reg:
             id_horario, _, _, horario, sobra, qtd_vendida, colocadas = reg
             col1, col2 = st.columns([3, 2])
+            horario_validado = extrair_hora_valida(horario)
             with col1:
-                hora_input = st.text_input(f"⏱️ Horário ({tipo})", value=horario.strftime("%H:%M") if horario else "", key=f"{tipo}_hora")
+                hora_input = st.text_input(
+                    f"⏱️ Horário ({tipo})",
+                    value=horario_validado.strftime("%H:%M") if horario_validado else "",
+                    key=f"{tipo}_hora"
+                )
             with col2:
-                sobra_input = st.number_input(f"\U0001F956 Sobra ({tipo})", min_value=0, value=sobra or 0, key=f"{tipo}_sobra")
+                sobra_input = st.number_input(f"🥖 Sobra ({tipo})", min_value=0, value=sobra or 0, key=f"{tipo}_sobra")
 
-            colocadas_input = st.number_input(f"\U0001F9FA Telas Colocadas ({tipo})", min_value=0, value=colocadas or 0, key=f"{tipo}_colocadas") if tipo == "fina" else None
+            colocadas_input = st.number_input(
+                f"🧺 Telas Colocadas ({tipo})", min_value=0, value=colocadas or 0, key=f"{tipo}_colocadas"
+            ) if tipo == "fina" else None
             valores[tipo] = {
                 "id_horario": id_horario,
                 "hora": hora_input.strip(),
@@ -199,9 +193,11 @@ def inserir_horarios_separados_front(conn):
             with col1:
                 hora_input = st.text_input(f"⏱️ Horário ({tipo})", key=f"novo_{tipo}_hora")
             with col2:
-                sobra_input = st.number_input(f"\U0001F956 Sobra ({tipo})", min_value=0, key=f"novo_{tipo}_sobra")
+                sobra_input = st.number_input(f"🥖 Sobra ({tipo})", min_value=0, key=f"novo_{tipo}_sobra")
 
-            colocadas_input = st.number_input(f"\U0001F9FA Telas Colocadas ({tipo})", min_value=0, key=f"novo_{tipo}_colocadas") if tipo == "fina" else None
+            colocadas_input = st.number_input(
+                f"🧺 Telas Colocadas ({tipo})", min_value=0, key=f"novo_{tipo}_colocadas"
+            ) if tipo == "fina" else None
             valores[tipo] = {
                 "id_horario": None,
                 "hora": hora_input.strip(),
@@ -209,7 +205,7 @@ def inserir_horarios_separados_front(conn):
                 "colocadas": colocadas_input
             }
 
-    if st.button("\U0001F4BE Salvar" if not editando else "\U0001F4BE Salvar Alterações"):
+    if st.button("💾 Salvar" if not editando else "💾 Salvar Alterações"):
         atualizados, inseridos, erros = 0, 0, []
 
         for tipo, dados in valores.items():
@@ -235,7 +231,6 @@ def inserir_horarios_separados_front(conn):
                     """, (id_telas, tipo, turno, hora, sobra, quantidade_vendida, colocadas))
                     inseridos += 1
 
-                # ✅ Atualizar telas_vendidas3
                 coluna_vendida = f"telas_{tipo}_{turno}"
                 cursor.execute("SELECT COUNT(*) FROM telas_vendidas3 WHERE id_telas = %s", (id_telas,))
                 existe = cursor.fetchone()[0]
@@ -252,7 +247,6 @@ def inserir_horarios_separados_front(conn):
                         VALUES (%s, %s, %s, %s)
                     """, (id_telas, quantidade_vendida, data_telas, semana))
 
-                # ✅ Atualizar telas colocadas + sobra (somente para fina)
                 if tipo == "fina":
                     total_telas = colocadas + sobra
                     if turno == "manha":
@@ -278,3 +272,4 @@ def inserir_horarios_separados_front(conn):
                 st.write(e)
         else:
             st.success(f"✅ {atualizados} atualizados, {inseridos} inseridos com sucesso!")
+
