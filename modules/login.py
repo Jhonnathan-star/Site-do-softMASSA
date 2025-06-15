@@ -1,13 +1,10 @@
 import streamlit as st
 from database.connection import conectar
-from modules.auth_utils import check_password, salvar_token, validar_token, marcar_token_expirado
-
-def obter_usuario_por_nome(conn, usuario: str):
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, senha, tipo FROM usuarios WHERE usuario = %s", (usuario,))
-    resultado = cursor.fetchone()
-    cursor.close()
-    return resultado
+from modules.auth_utils import (
+    check_password, salvar_token, validar_token, marcar_token_expirado,
+    obter_usuario_por_nome, gerar_token_recuperacao
+)
+from modules.email import enviar_email
 
 def obter_nome_usuario_por_id(usuario_id: int, conn):
     cursor = conn.cursor()
@@ -15,13 +12,6 @@ def obter_nome_usuario_por_id(usuario_id: int, conn):
     resultado = cursor.fetchone()
     cursor.close()
     return resultado[0] if resultado else None
-
-import streamlit as st
-from modules.auth_utils import (
-    check_password, salvar_token, validar_token, marcar_token_expirado,
-    obter_usuario_por_nome, gerar_token_recuperacao
-)
-from modules.email import enviar_email
 
 def login_usuario(conn, cookies):
     st.subheader("Login")
@@ -86,7 +76,6 @@ def login_usuario(conn, cookies):
         else:
             st.error("Usuário não encontrado.")
 
-
 def logout(conn, cookies):
     if 'token' in st.session_state:
         marcar_token_expirado(st.session_state['token'], conn)
@@ -100,12 +89,10 @@ def app_principal(conn, cookies):
 
     if st.session_state.get('logado'):
         st.write(f"Olá, {st.session_state['usuario']}! Você está logado.")
-        if st.button("Entrar", key="botao_logout"):
+        if st.button("Sair", key="botao_logout"):
             logout(conn, cookies)
     else:
         login_usuario(conn, cookies)
-        # Caso queira permitir cadastro diretamente no login:
-        # cadastrar_usuario(conn)
 
 def checar_sessao(conn, cookies):
     if st.session_state.get('logado'):
@@ -140,4 +127,3 @@ def main(cookies):
     checar_sessao(conn, cookies)
     app_principal(conn, cookies)
     conn.close()
-    
