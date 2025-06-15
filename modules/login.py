@@ -141,12 +141,7 @@ def login_usuario(conn, cookies):
                 if codigo_digitado == codigo_salvo:
                     token = salvar_token(usuario_id, conn)
 
-                    cookies["session_token"] = {
-                        "value": token,
-                        "max_age": 7 * 24 * 60 * 60,  # 7 dias
-                        "secure": True,
-                        "samesite": "Lax"
-                    }
+                    cookies["session_token"] = token  # Salva como string
                     cookies.save()
 
                     st.session_state.update({
@@ -172,10 +167,7 @@ def logout(conn, cookies):
     if 'token' in st.session_state:
         marcar_token_expirado(st.session_state['token'], conn)
 
-    cookies["session_token"] = {
-        "value": "",
-        "max_age": 0  # Expira imediatamente
-    }
+    cookies["session_token"] = ""  # Expira imediatamente
     cookies.save()
     st.session_state.clear()
     st.rerun()
@@ -210,10 +202,7 @@ def checar_sessao(conn, cookies):
             st.session_state['usuario_tipo'] = resultado[0] if resultado else "comum"
             st.session_state['token'] = token
         else:
-            cookies["session_token"] = {
-                "value": "",
-                "max_age": 0
-            }
+            cookies["session_token"] = ""
             cookies.save()
 
 def main(cookies):
