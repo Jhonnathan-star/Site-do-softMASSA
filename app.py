@@ -61,7 +61,11 @@ def logout():
                 marcar_token_expirado(st.session_state['token'], conn)
             finally:
                 conn.close()
-    cookies["session_token"] = ""
+
+    cookies["session_token"] = {
+        "value": "",
+        "max_age": 0  # Expira imediatamente
+    }
     cookies.save()
     st.session_state.clear()
     st.rerun()
