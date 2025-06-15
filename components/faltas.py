@@ -98,7 +98,7 @@ def visualizar_faltas(conn, id_usuario, nome_usuario, tipo_usuario):
                     conn.commit()
                     st.session_state.confirmar_excluir_falta = False
                     st.success("❌ Falta excluída com sucesso!")
-                    st.experimental_rerun()
+                    st.rerun()
                 if col4.button("❌ Não, cancelar exclusão"):
                     st.session_state.confirmar_excluir_falta = False
                     st.rerun()

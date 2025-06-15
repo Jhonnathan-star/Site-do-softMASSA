@@ -14,14 +14,13 @@ if "token" in query_params:
 import os
 from database.connection import conectar
 from modules.login import main as login_main, marcar_token_expirado
-from modules.inserir_telas import inserir_telas
 from modules.processa_turno import inserir_horarios_separados_front, buscar_historico_por_data
 from modules.predicao import criar_predicao_semana
-from modules.ver_alterar import ver_e_alterar_telas_por_data
 from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
 from components.ver_conta_funcionario import ver_conta_funcionario
 from modules.cadastrar import gerenciar_usuarios
 from streamlit_cookies_manager import EncryptedCookieManager
+from modules.gerenciar import gerenciar_telas  # Import da função combinada
 
 # --- Inicialização de Cookies ---
 cookie_password = os.getenv("COOKIE_PASSWORD")
@@ -94,9 +93,8 @@ if st.session_state.menu_visivel:
 
         if st.session_state['usuario_tipo'] == "admin":
             opcoes = [
-                "Inserir telas",
+                "Gerenciar telas",
                 "Registrar horários",
-                "Alterar telas",
                 "Histórico por data",
                 "Predição semanal com IA",
                 "Previsão manual de pedidos",
@@ -128,14 +126,11 @@ if pagina == "Home":
     st.success(f"Bem-vindo, {st.session_state['usuario']}!")
     st.write("Página inicial do sistema.")
 
-elif pagina == "Inserir telas":
-    executar_pagina(inserir_telas)
+elif pagina == "Gerenciar telas":
+    executar_pagina(gerenciar_telas)
 
 elif pagina == "Registrar horários":
     executar_pagina(inserir_horarios_separados_front)
-
-elif pagina == "Alterar telas":
-    executar_pagina(ver_e_alterar_telas_por_data)
 
 elif pagina == "Histórico por data":
     executar_pagina(buscar_historico_por_data)
