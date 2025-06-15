@@ -52,7 +52,7 @@ def executar_pagina(funcao):
     finally:
         conn.close()
 
-# --- Logout ---
+# --- Logout corrigido ---
 def logout():
     if 'token' in st.session_state:
         conn = conectar()
@@ -62,10 +62,8 @@ def logout():
             finally:
                 conn.close()
 
-    cookies["session_token"] = {
-        "value": "",
-        "max_age": 0  # Expira imediatamente
-    }
+    # ✅ CORREÇÃO: cookies devem ser string simples
+    cookies["session_token"] = ""
     cookies.save()
     st.session_state.clear()
     st.rerun()
@@ -158,3 +156,4 @@ elif pagina == "Ver conta do funcionário":
 
 elif pagina == "Gerenciar usuários":
     executar_pagina(gerenciar_usuarios)
+
