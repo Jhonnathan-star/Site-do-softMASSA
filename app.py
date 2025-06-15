@@ -1,159 +1,228 @@
-import streamlit as st
-
-# --- Configuração da página ---
-st.set_page_config(page_title="softMASSA", layout="centered")
-
-# --- Verificar se é link de redefinição de senha ---
-query_params = st.query_params
-if "token" in query_params:
-    from modules.Reiniciar_Senha import mostrar_redefinir_senha
-    mostrar_redefinir_senha()
-    st.stop()
-
-# --- Imports restantes ---
 import os
+import time
+import random
+import string
+import streamlit as st
+from modules.auth_utils import (
+    check_password, salvar_token, validar_token, marcar_token_expirado,
+    obter_usuario_por_nome, gerar_token_recuperacao
+)
+from modules.email import enviar_email
 from database.connection import conectar
-from modules.login import main as login_main, marcar_token_expirado
-from modules.inserir_telas import inserir_telas
-from modules.processa_turno import inserir_horarios_separados_front, buscar_historico_por_data
-from modules.predicao import criar_predicao_semana
-from modules.ver_alterar import ver_e_alterar_telas_por_data
-from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
-from components.ver_conta_funcionario import ver_conta_funcionario
-from modules.cadastrar import gerenciar_usuarios
-from streamlit_cookies_manager import EncryptedCookieManager
 
-# --- Inicialização de Cookies ---
-cookie_password = os.getenv("COOKIE_PASSWORD")
-if not cookie_password:
-    st.error("❌ Variável de ambiente 'COOKIE_PASSWORD' não definida.")
-    st.stop()
+# Gera código de 6 dígitos
+def gerar_codigo_verificacao():
+    return ''.join(random.choices(string.digits, k=6))
 
-cookies = EncryptedCookieManager(prefix="meuapp/", password=cookie_password)
-if not cookies.ready():
-    st.stop()
+# Armazena códigos temporários
+codigo_verificacao_temporario = {}
 
-# --- Inicializar sessão ---
-st.session_state.setdefault("logado", False)
-st.session_state.setdefault("usuario", None)
-st.session_state.setdefault("pagina", "Home")
-st.session_state.setdefault("usuario_tipo", "comum")
-if "menu_visivel" not in st.session_state:
-    st.session_state.menu_visivel = False  # começa escondido
+def obter_nome_usuario_por_id(usuario_id: int, conn):
+    cursor = conn.cursor()
+    cursor.execute("SELECT usuario FROM usuarios WHERE id = %s", (usuario_id,))
+    resultado = cursor.fetchone()
+    cursor.close()
+    return resultado[0] if resultado else None
 
-# --- Função utilitária para conectar e executar ---
-def executar_pagina(funcao):
-    conn = conectar()
-    if not conn:
-        st.error("❌ Não foi possível conectar ao banco de dados.")
-        return
-    try:
-        funcao(conn)
-    finally:
-        conn.close()
+def login_usuario(conn, cookies):
+    st.subheader("Login")
 
-# --- Logout corrigido ---
-def logout():
+    if 'etapa_login' not in st.session_state:
+        st.session_state['etapa_login'] = 'input_credenciais'
+
+    # Etapa 1: Entrada de usuário e senha
+    if st.session_state['etapa_login'] == 'input_credenciais':
+        usuario = st.text_input("Usuário", key="login_usuario")
+        senha = st.text_input("Senha", type="password", key="login_senha")
+
+        esqueceu_senha = st.checkbox("Esqueci minha senha", key="checkbox_esqueci_senha")
+
+        if esqueceu_senha:
+            st.info("Digite seu nome de usuário para receber instruções de recuperação.")
+            usuario_recuperar = st.text_input("Usuário para recuperação", key="recuperar_usuario")
+
+            if st.button("Enviar instruções de recuperação", key="botao_recuperar"):
+                if not usuario_recuperar:
+                    st.warning("Por favor, digite o nome de usuário.")
+                else:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT id, email FROM usuarios WHERE usuario = %s", (usuario_recuperar,))
+                    resultado = cursor.fetchone()
+                    cursor.close()
+
+                    if resultado:
+                        usuario_id, email_destino = resultado
+                        if not email_destino:
+                            st.error("Usuário sem e-mail cadastrado. Contate o administrador.")
+                            return
+                        token = gerar_token_recuperacao(usuario_id, conn)
+                        link = f"https://site-do-softmassa-evoj9v7l97aat9i6fptryx.streamlit.app/?token={token}"
+                        enviar_email(email_destino, link)
+                        st.success("✅ Instruções enviadas para o e-mail.")
+                    else:
+                        st.error("Usuário não encontrado.")
+
+        if st.button("Entrar", key="botao_entrar"):
+            if not usuario or not senha:
+                st.warning("Preencha usuário e senha.")
+                return
+
+            dados = obter_usuario_por_nome(conn, usuario)
+            if dados:
+                usuario_id, senha_hashed, tipo_usuario = dados
+                if check_password(senha, senha_hashed):
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT email FROM usuarios WHERE id = %s", (usuario_id,))
+                    resultado = cursor.fetchone()
+                    cursor.close()
+                    email = resultado[0] if resultado else None
+
+                    if not email:
+                        st.error("Usuário sem e-mail cadastrado.")
+                        return
+
+                    codigo = gerar_codigo_verificacao()
+                    codigo_verificacao_temporario[usuario] = (codigo, time.time())
+
+                    # Salva dados temporários na sessão
+                    st.session_state.update({
+                        'usuario_temp': usuario,
+                        'senha_temp': senha,
+                        'usuario_id_temp': usuario_id,
+                        'usuario_tipo_temp': tipo_usuario,
+                        'etapa_login': 'enviando_codigo'
+                    })
+                    st.experimental_rerun()
+                else:
+                    st.error("Senha incorreta.")
+            else:
+                st.error("Usuário não encontrado.")
+
+    # Etapa 2: Envio do código
+    elif st.session_state['etapa_login'] == 'enviando_codigo':
+        usuario = st.session_state.get('usuario_temp')
+        usuario_id = st.session_state.get('usuario_id_temp')
+
+        codigo, _ = codigo_verificacao_temporario.get(usuario, ("", 0))
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT email FROM usuarios WHERE id = %s", (usuario_id,))
+        resultado = cursor.fetchone()
+        cursor.close()
+        email = resultado[0] if resultado else None
+
+        with st.spinner('Enviando código de verificação para seu e-mail, aguarde...'):
+            enviar_email(email, f"Seu código de verificação: {codigo}")
+            time.sleep(0.5)
+
+        st.success("Código enviado com sucesso!")
+        st.session_state['etapa_login'] = 'verificar_codigo'
+        st.experimental_rerun()
+
+    # Etapa 3: Verificação do código
+    elif st.session_state['etapa_login'] == 'verificar_codigo':
+        st.write("Digite o código de verificação enviado ao seu e-mail:")
+        codigo_digitado = st.text_input("Código de verificação", key="input_codigo")
+
+        if st.button("Verificar código"):
+            usuario = st.session_state.get('usuario_temp')
+            senha = st.session_state.get('senha_temp')
+            usuario_id = st.session_state.get('usuario_id_temp')
+            tipo_usuario = st.session_state.get('usuario_tipo_temp')
+
+            dados = obter_usuario_por_nome(conn, usuario)
+            if dados:
+                codigo_salvo, timestamp = codigo_verificacao_temporario.get(usuario, ("", 0))
+                if time.time() - timestamp > 90:
+                    st.error("⏰ Código expirado. Tente novamente.")
+                    st.session_state['etapa_login'] = 'input_credenciais'
+                    return
+
+                if codigo_digitado == codigo_salvo:
+                    token = salvar_token(usuario_id, conn)
+
+                    cookies["session_token"] = {
+                        "value": token,
+                        "max_age": 7 * 24 * 60 * 60,  # 7 dias
+                        "secure": True,
+                        "samesite": "Lax"
+                    }
+                    cookies.save()
+
+                    st.session_state.update({
+                        'logado': True,
+                        'usuario_id': usuario_id,
+                        'usuario': usuario,
+                        'usuario_tipo': tipo_usuario,
+                        'token': token,
+                        'etapa_login': 'input_credenciais'
+                    })
+
+                    # Limpa variáveis temporárias
+                    codigo_verificacao_temporario.pop(usuario, None)
+                    for key in ['usuario_temp', 'senha_temp', 'usuario_id_temp', 'usuario_tipo_temp']:
+                        st.session_state.pop(key, None)
+
+                    st.success(f"✅ Bem-vindo, {usuario}!")
+                    st.experimental_rerun()
+                else:
+                    st.error("❌ Código incorreto.")
+
+def logout(conn, cookies):
     if 'token' in st.session_state:
-        conn = conectar()
-        if conn:
-            try:
-                marcar_token_expirado(st.session_state['token'], conn)
-            finally:
-                conn.close()
+        marcar_token_expirado(st.session_state['token'], conn)
 
-    # ✅ CORREÇÃO: cookies devem ser string simples
-    cookies["session_token"] = ""
+    cookies["session_token"] = {
+        "value": "",
+        "max_age": 0  # Expira imediatamente
+    }
     cookies.save()
     st.session_state.clear()
-    st.rerun()
+    st.experimental_rerun()
 
-# --- Autenticação ---
-conn = conectar()
-if not conn:
-    st.error("❌ Erro ao conectar ao banco de dados.")
-    st.stop()
+def app_principal(conn, cookies):
+    st.title("🔐 Acesso ao softMASSA")
+    if st.session_state.get('logado'):
+        st.write(f"Olá, {st.session_state['usuario']}! Você está logado.")
+        if st.button("Sair", key="botao_logout"):
+            logout(conn, cookies)
+    else:
+        login_usuario(conn, cookies)
 
-if not st.session_state["logado"]:
-    login_main(cookies)
-    conn.close()
-    st.stop()
+def checar_sessao(conn, cookies):
+    if st.session_state.get('logado'):
+        return
 
-conn.close()
+    token = cookies.get("session_token")
+    if token:
+        usuario_id = validar_token(token, conn)
+        if usuario_id:
+            st.session_state.update({
+                'logado': True,
+                'usuario_id': usuario_id,
+                'usuario': obter_nome_usuario_por_id(usuario_id, conn)
+            })
 
-# --- Botão para mostrar/ocultar menu ---
-col1, col2 = st.columns([1, 9])
-with col1:
-    if st.button("☰"):
-        st.session_state.menu_visivel = not st.session_state.menu_visivel
-
-# --- Mostrar o menu se estiver visível ---
-if st.session_state.menu_visivel:
-    with st.sidebar:
-        st.markdown("## 🍞 Sistema da softMASSA")
-        st.markdown(f"👤 {st.session_state['usuario']} ({st.session_state['usuario_tipo']})")
-        st.markdown("### 📂 Menu")
-
-        if st.session_state['usuario_tipo'] == "admin":
-            opcoes = [
-                "Inserir telas",
-                "Registrar horários",
-                "Alterar telas",
-                "Histórico por data",
-                "Predição semanal com IA",
-                "Previsão manual de pedidos",
-                "Previsão automática de pedidos",
-                "Ver conta do funcionário",
-                "Gerenciar usuários"
-            ]
+            cursor = conn.cursor()
+            cursor.execute("SELECT tipo FROM usuarios WHERE id = %s", (usuario_id,))
+            resultado = cursor.fetchone()
+            cursor.close()
+            st.session_state['usuario_tipo'] = resultado[0] if resultado else "comum"
+            st.session_state['token'] = token
         else:
-            opcoes = [
-                "Registrar horários",
-                "Histórico por data",
-                "Ver conta do funcionário"
-            ]
+            cookies["session_token"] = {
+                "value": "",
+                "max_age": 0
+            }
+            cookies.save()
 
-        for opcao in opcoes:
-            if st.button(opcao, use_container_width=True):
-                st.session_state["pagina"] = opcao
-                st.session_state.menu_visivel = False
-                st.rerun()
+def main(cookies):
+    conn = conectar()
+    if not conn:
+        st.error("Erro ao conectar ao banco de dados.")
+        st.stop()
 
-        if st.button("🚪 Sair"):
-            logout()
-
-# --- Página inicial ou selecionada ---
-pagina = st.session_state.get("pagina", "Home")
-
-if pagina == "Home":
-    st.markdown("## 🍞 Sistema da softMASSA")
-    st.success(f"Bem-vindo, {st.session_state['usuario']}!")
-    st.write("Página inicial do sistema.")
-
-elif pagina == "Inserir telas":
-    executar_pagina(inserir_telas)
-
-elif pagina == "Registrar horários":
-    executar_pagina(inserir_horarios_separados_front)
-
-elif pagina == "Alterar telas":
-    executar_pagina(ver_e_alterar_telas_por_data)
-
-elif pagina == "Histórico por data":
-    executar_pagina(buscar_historico_por_data)
-
-elif pagina == "Predição semanal com IA":
-    executar_pagina(criar_predicao_semana)
-
-elif pagina == "Previsão manual de pedidos":
-    executar_pagina(inserir_pedidos_manual)
-
-elif pagina == "Previsão automática de pedidos":
-    executar_pagina(inserir_pedidos_automatizado)
-
-elif pagina == "Ver conta do funcionário":
-    executar_pagina(ver_conta_funcionario)
-
-elif pagina == "Gerenciar usuários":
-    executar_pagina(gerenciar_usuarios)
+    checar_sessao(conn, cookies)
+    app_principal(conn, cookies)
+    conn.close()
 
