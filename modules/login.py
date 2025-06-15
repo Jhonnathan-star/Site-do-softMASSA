@@ -92,7 +92,7 @@ def login_usuario(conn, cookies):
                         'usuario_tipo_temp': tipo_usuario,
                         'etapa_login': 'enviando_codigo'
                     })
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Senha incorreta.")
             else:
@@ -117,7 +117,7 @@ def login_usuario(conn, cookies):
 
         st.success("Código enviado com sucesso!")
         st.session_state['etapa_login'] = 'verificar_codigo'
-        st.experimental_rerun()
+        st.rerun()
 
     # Etapa 3: Verificação do código
     elif st.session_state['etapa_login'] == 'verificar_codigo':
@@ -164,7 +164,7 @@ def login_usuario(conn, cookies):
                         st.session_state.pop(key, None)
 
                     st.success(f"✅ Bem-vindo, {usuario}!")
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("❌ Código incorreto.")
 
@@ -178,7 +178,7 @@ def logout(conn, cookies):
     }
     cookies.save()
     st.session_state.clear()
-    st.experimental_rerun()
+    st.rerun()
 
 def app_principal(conn, cookies):
     st.title("🔐 Acesso ao softMASSA")
