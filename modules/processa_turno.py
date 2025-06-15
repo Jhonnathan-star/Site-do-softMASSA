@@ -43,6 +43,12 @@ def buscar_historico_por_data(conn):
                 datas = pd.date_range(start=data_ini, end=data_fim).to_list()
                 mostrar_historico_para_datas(conn, datas)
 
+def is_feriado(data):
+    # 📝 Exemplo simples: substitua isso por sua lógica real (ex: consulta no banco, lista, API)
+    feriados = ["2025-06-12", "2025-09-07"]  # coloque as datas de feriados aqui no formato "YYYY-MM-DD"
+    return str(data) in feriados
+
+
 def mostrar_historico_para_datas(conn, datas):
     cursor = conn.cursor()
 
@@ -72,7 +78,17 @@ def mostrar_historico_para_datas(conn, datas):
             continue
 
         primeira = resultados[0]
+        data_ref = pd.to_datetime(primeira[1])
         st.markdown(f"### 🗓️ Resumo do dia {primeira[1]} - Semana {primeira[2]}")
+
+        # Verifica se é domingo ou feriado
+        is_domingo = data_ref.weekday() == 6
+        is_feriado_flag = is_feriado(data_ref.date())
+
+        if is_domingo:
+            st.info("📌 **DOMINGO**, funcionamento apenas no turno da manhã.")
+        elif is_feriado_flag:
+            st.info("📌 Foi **FERIADO**, funcionamento apenas no turno da manhã.")
 
         colocadas_dict = {
             ("grossa", "manha"): primeira[3],
@@ -102,23 +118,28 @@ def mostrar_historico_para_datas(conn, datas):
 
         dados = []
         for tipo, turno in ordem_fixa:
+            # Pula os turnos da tarde se for domingo ou feriado
+            if (is_domingo or is_feriado_flag) and turno == "tarde":
+                continue
+
             colocado = colocadas_dict.get((tipo, turno), None)
             horario = horarios_map.get((tipo, turno), {}).get("horario", "-")
             vendida = horarios_map.get((tipo, turno), {}).get("vendida", None)
 
             dados.append({
-                "🥖 Colocadas": colocado,
+                "🧆 Colocadas": colocado,
                 "Tipo de Pão": tipo.capitalize(),
                 "Turno": turno.capitalize(),
                 "⏱️ Horário": horario,
                 "🛒 Vendidas": vendida if vendida is not None else "-"
             })
 
-        df = pd.DataFrame(dados)[["🥖 Colocadas", "Tipo de Pão", "Turno", "⏱️ Horário", "🛒 Vendidas"]]
+        df = pd.DataFrame(dados)[["🧆 Colocadas", "Tipo de Pão", "Turno", "⏱️ Horário", "🛒 Vendidas"]]
         st.dataframe(df, use_container_width=True)
         st.markdown("---")
 
     cursor.close()
+
 
 def inserir_horarios_separados_front(conn):
     st.title("Registro de Horários dos Pães")
@@ -128,6 +149,7 @@ def inserir_horarios_separados_front(conn):
         return
 
     data_str = data.strftime('%Y-%m-%d')
+    dia_semana = data.weekday()  # 6 = domingo
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -147,6 +169,10 @@ def inserir_horarios_separados_front(conn):
     turno = st.radio("🕒 Selecione o turno", ["manha", "tarde"])
     valor_grossa = grossa_manha if turno == "manha" else grossa_tarde
     valor_fina = fina_manha if turno == "manha" else fina_tarde
+
+    feriado = False
+    if turno == "manha":
+        feriado = st.checkbox("📌 Marque aqui se hoje for feriado")
 
     cursor.execute("""
         SELECT id, tipo_pao, turno, horario, sobra, quantidade_vendida, telas_colocadas
@@ -242,14 +268,34 @@ def inserir_horarios_separados_front(conn):
                 else:
                     cursor.execute("SELECT data, semana FROM telas WHERE id_telas = %s", (id_telas,))
                     data_telas, semana = cursor.fetchone()
+                    valores_iniciais = {
+                        f"telas_grossa_manha": 0, f"telas_grossa_tarde": 0,
+                        f"telas_fina_manha": 0, f"telas_fina_tarde": 0
+                    }
+                    valores_iniciais[coluna_vendida] = quantidade_vendida
+
+                    if dia_semana == 6 and turno == "manha":
+                        valores_iniciais[f"telas_grossa_tarde"] = 0
+                        valores_iniciais[f"telas_fina_tarde"] = 0
+
                     cursor.execute(f"""
-                        INSERT INTO telas_vendidas3 (id_telas, {coluna_vendida}, data, semana)
-                        VALUES (%s, %s, %s, %s)
-                    """, (id_telas, quantidade_vendida, data_telas, semana))
+                        INSERT INTO telas_vendidas3 (id_telas, telas_grossa_manha, telas_grossa_tarde,
+                            telas_fina_manha, telas_fina_tarde, data, semana)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (id_telas, valores_iniciais['telas_grossa_manha'], valores_iniciais['telas_grossa_tarde'],
+                          valores_iniciais['telas_fina_manha'], valores_iniciais['telas_fina_tarde'],
+                          data_telas, semana))
 
                 if tipo == "fina":
                     total_telas = colocadas + sobra
-                    if turno == "manha":
+                    if (turno == "manha") and (dia_semana == 6 or feriado):
+                        cursor.execute("SELECT data FROM telas WHERE id_telas = %s", (id_telas,))
+                        data_atual = cursor.fetchone()[0]
+                        dia_seguinte = data_atual + timedelta(days=1)
+                        cursor.execute("""
+                            UPDATE telas SET telas_fina_manha = %s WHERE data = %s
+                        """, (total_telas, dia_seguinte))
+                    elif turno == "manha":
                         cursor.execute("""
                             UPDATE telas SET telas_fina_tarde = %s WHERE id_telas = %s
                         """, (total_telas, id_telas))
@@ -272,4 +318,3 @@ def inserir_horarios_separados_front(conn):
                 st.write(e)
         else:
             st.success(f"✅ {atualizados} atualizados, {inseridos} inseridos com sucesso!")
-

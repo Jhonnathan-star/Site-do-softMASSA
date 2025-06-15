@@ -1,6 +1,16 @@
 import streamlit as st
+
 # --- Configuração da página ---
 st.set_page_config(page_title="softMASSA", layout="centered")
+
+# --- Verificar se é link de redefinição de senha ---
+query_params = st.query_params
+if "token" in query_params:
+    from modules.Reiniciar_Senha import mostrar_redefinir_senha
+    mostrar_redefinir_senha()
+    st.stop()
+
+# --- Imports restantes ---
 import os
 from database.connection import conectar
 from modules.login import main as login_main, marcar_token_expirado
@@ -12,15 +22,6 @@ from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
 from components.ver_conta_funcionario import ver_conta_funcionario
 from modules.cadastrar import gerenciar_usuarios
 from streamlit_cookies_manager import EncryptedCookieManager
-
-
-
-# --- Verificar se é link de redefinição de senha ---
-query_params = st.query_params
-if "token" in query_params:
-    from modules.Reiniciar_Senha import mostrar_redefinir_senha
-    mostrar_redefinir_senha()
-    st.stop()
 
 # --- Inicialização de Cookies ---
 cookie_password = os.getenv("COOKIE_PASSWORD")
@@ -38,7 +39,7 @@ st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("pagina", "Home")
 st.session_state.setdefault("usuario_tipo", "comum")
 if "menu_visivel" not in st.session_state:
-    st.session_state.menu_visivel = False
+    st.session_state.menu_visivel = False  # começa escondido
 
 # --- Função utilitária para conectar e executar ---
 def executar_pagina(funcao):
@@ -51,6 +52,7 @@ def executar_pagina(funcao):
     finally:
         conn.close()
 
+# --- Logout ---
 def logout():
     if 'token' in st.session_state:
         conn = conectar()
@@ -59,15 +61,10 @@ def logout():
                 marcar_token_expirado(st.session_state['token'], conn)
             finally:
                 conn.close()
-
-    # Limpa o cookie corretamente (sem passar dicionário)
     cookies["session_token"] = ""
     cookies.save()
-
-    # Limpa a sessão e recarrega
     st.session_state.clear()
     st.rerun()
-
 
 # --- Autenticação ---
 conn = conectar()
