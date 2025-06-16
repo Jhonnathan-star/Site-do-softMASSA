@@ -144,3 +144,4 @@ def criar_predicao_semana(conn):
         conn.commit()
         cursor.close()
         st.success("✅ Previsões inseridas/atualizadas com sucesso no banco de dados!")
+    

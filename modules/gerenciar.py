@@ -1,11 +1,13 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
+from modules.processa_turno import extrair_hora_valida
 
 def gerenciar_telas(conn):
     st.header("📅 Gerenciar Telas por Data")
 
     data = st.date_input("Selecione a data", format="YYYY-MM-DD")
+    data_str = data.strftime("%Y-%m-%d")
     semana = data.strftime("%A")
     domingo = semana == "Sunday"
     semana_pt = data.strftime("%A").capitalize()
@@ -14,18 +16,42 @@ def gerenciar_telas(conn):
 
     st.write(f"🗓️ Dia selecionado: **{semana_pt}**{' (Feriado)' if feriado else ''}")
 
-    # Buscar sugestões da semana passada (mesmo dia da semana anterior)
-    sugestoes = {"grossa_manha": None, "grossa_tarde": None, "fina_manha": None, "fina_tarde": None}
+    # Mostrar histórico da semana anterior
     data_anterior = data - timedelta(days=7)
+    st.markdown("### 🔙 Histórico do mesmo dia da semana passada")
+    mostrar_historico_para_datas(conn, [data_anterior])
+
+    # Buscar total vendido para telas fina na semana passada (manha e tarde)
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT telas_grossa_manha, telas_grossa_tarde, telas_fina_manha, telas_fina_tarde
-        FROM telas_vendidas3
-        WHERE data = %s
+        SELECT h.turno, SUM(h.quantidade_vendida)
+        FROM telas t
+        JOIN horarios h ON t.id_telas = h.id_telas
+        WHERE t.data = %s AND h.tipo_pao = 'fina'
+        GROUP BY h.turno
     """, (data_anterior,))
-    venda_antiga = cursor.fetchone()
-    if venda_antiga:
-        sugestoes["grossa_manha"], sugestoes["grossa_tarde"], sugestoes["fina_manha"], sugestoes["fina_tarde"] = venda_antiga
+    resultados_vendidos = dict(cursor.fetchall())
+    fina_manha_vendida = int(resultados_vendidos.get('manha', 0))
+    fina_tarde_vendida = int(resultados_vendidos.get('tarde', 0))
+
+    # Inicializa chaves no session_state para evitar KeyError, sempre que trocar data
+    if "data_selecionada" not in st.session_state or st.session_state.data_selecionada != data_str:
+        st.session_state.data_selecionada = data_str
+
+        st.session_state[f"g_manha_{data_str}"] = 0
+        st.session_state[f"g_tarde_{data_str}"] = 0
+        st.session_state[f"f_manha_{data_str}"] = fina_manha_vendida
+        st.session_state[f"f_tarde_{data_str}"] = fina_tarde_vendida
+
+    # Para garantir, inicializa se não existir (caso seja rerun após exclusão)
+    for chave, valor_padrao in [
+        (f"g_manha_{data_str}", 0),
+        (f"g_tarde_{data_str}", 0),
+        (f"f_manha_{data_str}", fina_manha_vendida),
+        (f"f_tarde_{data_str}", fina_tarde_vendida),
+    ]:
+        if chave not in st.session_state:
+            st.session_state[chave] = valor_padrao
 
     # Verificar se já existe registro para essa data
     cursor.execute("""
@@ -38,24 +64,12 @@ def gerenciar_telas(conn):
     if registros:
         st.subheader("✏️ Registro existente - Alterar ou Excluir")
         for r in registros:
-            id_telas, data_str, semana, g_m, g_t, f_m, f_t = r
-            with st.expander(f"📄 Registro - {data_str} (Semana {semana})", expanded=True):
-                nova_grossa_manha = st.number_input(
-                    f"Telas Grossa (Manhã){f' - vendido sem. passada: {sugestoes['grossa_manha']}' if sugestoes['grossa_manha'] is not None else ''}",
-                    min_value=0, value=g_m, key=f"g_m_{id_telas}"
-                )
-                nova_grossa_tarde = st.number_input(
-                    f"Telas Grossa (Tarde){f' - vendido sem. passada: {sugestoes['grossa_tarde']}' if sugestoes['grossa_tarde'] is not None else ''}",
-                    min_value=0, value=g_t, key=f"g_t_{id_telas}"
-                ) if not desativar_tarde else 0
-                nova_fina_manha = st.number_input(
-                    f"Telas Fina (Manhã){f' - vendido sem. passada: {sugestoes['fina_manha']}' if sugestoes['fina_manha'] is not None else ''}",
-                    min_value=0, value=f_m, key=f"f_m_{id_telas}"
-                )
-                nova_fina_tarde = st.number_input(
-                    f"Telas Fina (Tarde){f' - vendido sem. passada: {sugestoes['fina_tarde']}' if sugestoes['fina_tarde'] is not None else ''}",
-                    min_value=0, value=f_t, key=f"f_t_{id_telas}"
-                ) if not desativar_tarde else 0
+            id_telas, data_str_reg, semana_reg, g_m, g_t, f_m, f_t = r
+            with st.expander(f"📄 Registro - {data_str_reg} (Semana {semana_reg})", expanded=True):
+                nova_grossa_manha = st.number_input(f"Telas Grossa (Manhã)", min_value=0, value=g_m, key=f"g_m_{id_telas}")
+                nova_grossa_tarde = st.number_input(f"Telas Grossa (Tarde)", min_value=0, value=g_t, key=f"g_t_{id_telas}") if not desativar_tarde else 0
+                nova_fina_manha = st.number_input(f"Telas Fina (Manhã)", min_value=0, value=f_m, key=f"f_m_{id_telas}")
+                nova_fina_tarde = st.number_input(f"Telas Fina (Tarde)", min_value=0, value=f_t, key=f"f_t_{id_telas}") if not desativar_tarde else 0
 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -72,7 +86,6 @@ def gerenciar_telas(conn):
                         st.success("✅ Registro atualizado com sucesso!")
 
                 with col2:
-                    # Inicializa flag de confirmação exclusão se não existir
                     if f"confirmar_excluir_{id_telas}" not in st.session_state:
                         st.session_state[f"confirmar_excluir_{id_telas}"] = False
 
@@ -93,26 +106,12 @@ def gerenciar_telas(conn):
                         if c2.button("❌ Não, cancelar", key=f"btn_nao_{id_telas}"):
                             st.session_state[f"confirmar_excluir_{id_telas}"] = False
                             st.rerun()
-
     else:
         st.subheader("➕ Nenhum registro - Inserir novos dados")
-        telas_grossa_manha = st.number_input(
-            f"📌 Telas Grossa - Manhã{f' (vendido sem. passada: {sugestoes['grossa_manha']})' if sugestoes['grossa_manha'] is not None else ''}",
-            min_value=0, step=1
-        )
-        telas_grossa_tarde = st.number_input(
-            f"📌 Telas Grossa - Tarde{f' (vendido sem. passada: {sugestoes['grossa_tarde']})' if sugestoes['grossa_tarde'] is not None else ''}",
-            min_value=0, step=1
-        ) if not desativar_tarde else 0
-
-        telas_fina_manha = st.number_input(
-            f"📌 Telas Fina - Manhã{f' (vendido sem. passada: {sugestoes['fina_manha']})' if sugestoes['fina_manha'] is not None else ''}",
-            min_value=0, step=1
-        )
-        telas_fina_tarde = st.number_input(
-            f"📌 Telas Fina - Tarde{f' (vendido sem. passada: {sugestoes['fina_tarde']})' if sugestoes['fina_tarde'] is not None else ''}",
-            min_value=0, step=1
-        ) if not desativar_tarde else 0
+        telas_grossa_manha = st.number_input("📌 Telas Grossa - Manhã", min_value=0, step=1, value=st.session_state[f"g_manha_{data_str}"], key=f"g_manha_{data_str}")
+        telas_grossa_tarde = st.number_input("📌 Telas Grossa - Tarde", min_value=0, step=1, value=st.session_state[f"g_tarde_{data_str}"], key=f"g_tarde_{data_str}") if not desativar_tarde else 0
+        telas_fina_manha = st.number_input("📌 Telas Fina - Manhã", min_value=0, step=1, value=st.session_state[f"f_manha_{data_str}"], key=f"f_manha_{data_str}")
+        telas_fina_tarde = st.number_input("📌 Telas Fina - Tarde", min_value=0, step=1, value=st.session_state[f"f_tarde_{data_str}"], key=f"f_tarde_{data_str}") if not desativar_tarde else 0
 
         if desativar_tarde:
             st.info("É domingo ou feriado. Campos da tarde serão registrados como 0 automaticamente.")
@@ -133,3 +132,95 @@ def gerenciar_telas(conn):
                 st.error(f"❌ Erro ao inserir dados: {e}")
 
     cursor.close()
+
+def mostrar_historico_para_datas(conn, datas):
+    cursor = conn.cursor()
+
+    for data_input in datas:
+        sql = """
+            SELECT 
+                t.id_telas,
+                t.data,
+                t.semana,
+                t.telas_grossa_manha,
+                t.telas_grossa_tarde,
+                t.telas_fina_manha,
+                t.telas_fina_tarde,
+                h.tipo_pao,
+                h.turno,
+                h.horario,
+                h.quantidade_vendida
+            FROM telas t
+            LEFT JOIN horarios h ON t.id_telas = h.id_telas
+            WHERE t.data = %s
+        """
+        cursor.execute(sql, (data_input,))
+        resultados = cursor.fetchall()
+
+        if not resultados:
+            st.warning(f"❌ Nenhum dado encontrado para a data {data_input}.")
+            continue
+
+        primeira = resultados[0]
+        data_ref = pd.to_datetime(primeira[1])
+        st.markdown(f"### 🗓️ Resumo do dia {primeira[1]} - Semana {primeira[2]}")
+
+        is_domingo = data_ref.weekday() == 6
+        is_feriado_flag = is_feriado(data_ref.date())
+
+        if is_domingo:
+            st.info("📌 **DOMINGO**, funcionamento apenas no turno da manhã.")
+        elif is_feriado_flag:
+            st.info("📌 Foi **FERIADO**, funcionamento apenas no turno da manhã.")
+
+        colocadas_dict = {
+            ("grossa", "manha"): primeira[3],
+            ("grossa", "tarde"): primeira[4],
+            ("fina", "manha"): primeira[5],
+            ("fina", "tarde"): primeira[6]
+        }
+
+        horarios_map = {}
+        for row in resultados:
+            tipo = row[7]
+            turno = row[8]
+            horario = extrair_hora_valida(row[9])
+            vendida = row[10]
+            if tipo and turno:
+                horarios_map[(tipo, turno)] = {
+                    "horario": horario.strftime("%H:%M") if horario else "-",
+                    "vendida": vendida
+                }
+
+        ordem_fixa = [
+            ("grossa", "manha"),
+            ("grossa", "tarde"),
+            ("fina", "manha"),
+            ("fina", "tarde")
+        ]
+
+        dados = []
+        for tipo, turno in ordem_fixa:
+            if (is_domingo or is_feriado_flag) and turno == "tarde":
+                continue
+
+            colocado = colocadas_dict.get((tipo, turno), None)
+            horario = horarios_map.get((tipo, turno), {}).get("horario", "-")
+            vendida = horarios_map.get((tipo, turno), {}).get("vendida", None)
+
+            dados.append({
+                "🧆 Colocadas": colocado,
+                "Tipo de Pão": tipo.capitalize(),
+                "Turno": turno.capitalize(),
+                "⏱️ Horário": horario,
+                "🛒 Vendidas": vendida if vendida is not None else "-"
+            })
+
+        df = pd.DataFrame(dados)[["🧆 Colocadas", "Tipo de Pão", "Turno", "⏱️ Horário", "🛒 Vendidas"]]
+        st.dataframe(df, use_container_width=True)
+        st.markdown("---")
+
+    cursor.close()
+
+def is_feriado(data):
+    return False  # Substitua com lógica real se quiser

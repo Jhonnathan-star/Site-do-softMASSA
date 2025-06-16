@@ -14,7 +14,7 @@ def inserir_pedidos_automatizado(conn):
 
     data_inicio = st.date_input("Data início")
     turno_inicio = st.selectbox("Turno início", options=["manhã", "tarde"])
-    
+
     data_fim = st.date_input("Data fim")
     turno_fim = st.selectbox("Turno fim", options=["manhã", "tarde"])
 
@@ -61,11 +61,9 @@ def inserir_pedidos_automatizado(conn):
             total_grossa += pacotes_grossa
             total_fina += pacotes_fina
 
-            # Verifica se chegou no fim
             if data_atual == data_fim and turno_atual == turno_fim:
                 break
 
-            # Avança o turno
             if turno_atual == "manhã":
                 turno_atual = "tarde"
             else:
@@ -74,7 +72,7 @@ def inserir_pedidos_automatizado(conn):
 
         valor_total = (total_grossa + total_fina) * valor_pacote
 
-        # Armazena para exibição e inserção
+        # Guardar no session_state para mostrar e inserir
         st.session_state['resultados'] = resultados
         st.session_state['total_grossa'] = total_grossa
         st.session_state['total_fina'] = total_fina
@@ -84,7 +82,6 @@ def inserir_pedidos_automatizado(conn):
         st.session_state['tipo_pao_fina'] = tipo_pao_fina
         st.session_state['valor_pacote'] = valor_pacote
 
-    # Exibir resultados
     if 'resultados' in st.session_state:
         st.subheader("Previsão por dia e turno")
         st.write("---")
@@ -92,28 +89,56 @@ def inserir_pedidos_automatizado(conn):
             st.write(f"{data_} - {turno_}: Grossa: {pct_grossa} pct | Fina: {pct_fina} pct")
 
         st.write("---")
-        st.write(f"**Total de pacotes de {st.session_state['tipo_pao_grossa']} (grossa):** {st.session_state['total_grossa']} pct")
-        st.write(f"**Total de pacotes de {st.session_state['tipo_pao_fina']} (fina):** {st.session_state['total_fina']} pct")
-        st.write(f"**Valor total estimado:** R$ {st.session_state['valor_total']:.2f}")
+        st.markdown("### Editar previsão total de pacotes")
 
-        inserir = st.radio("Deseja inserir esses dados na tabela 'pedidos'?", ("Não", "Sim"))
+        total_grossa_editado = st.number_input(
+            f"Editar total de pacotes GROSSA ({st.session_state.get('tipo_pao_grossa', 'G3')})",
+            value=st.session_state.get('total_grossa', 0),
+            min_value=0,
+            step=1,
+            key="input_total_grossa"
+        )
 
-        if inserir == "Sim":
-            insert_query = """
-                INSERT INTO pedidos (Data, `Grossa (PCT)`, `Fina (PCT)`, `Valor R$`)
-                VALUES (%s, %s, %s, %s)
-            """
-            cursor.execute(insert_query, (
-                str(st.session_state['data_inicio']),
-                st.session_state['total_grossa'],
-                st.session_state['total_fina'],
-                st.session_state['valor_total']
-            ))
-            conn.commit()
-            st.success(f"Dados inseridos na tabela 'pedidos'. Valor total: R$ {st.session_state['valor_total']:.2f}")
+        total_fina_editado = st.number_input(
+            f"Editar total de pacotes FINA ({st.session_state.get('tipo_pao_fina', 'F3')})",
+            value=st.session_state.get('total_fina', 0),
+            min_value=0,
+            step=1,
+            key="input_total_fina"
+        )
 
-            for key in ['resultados', 'total_grossa', 'total_fina', 'valor_total', 'data_inicio', 'tipo_pao_grossa', 'tipo_pao_fina', 'valor_pacote']:
-                del st.session_state[key]
+        if st.button("Recalcular valor total"):
+            novo_valor_total = (total_grossa_editado + total_fina_editado) * st.session_state.get('valor_pacote', 62.0)
+            st.session_state['valor_total_editado'] = novo_valor_total
+            st.session_state['pacotes_grossa_editado'] = total_grossa_editado
+            st.session_state['pacotes_fina_editado'] = total_fina_editado
+
+        if 'valor_total_editado' in st.session_state:
+            st.write(f"**Novo valor total estimado:** R$ {st.session_state['valor_total_editado']:.2f}")
+
+            inserir = st.radio("Deseja inserir esses dados na tabela 'pedidos'?", ("Não", "Sim"))
+
+            if inserir == "Sim":
+                insert_query = """
+                    INSERT INTO pedidos (Data, `Grossa (PCT)`, `Fina (PCT)`, `Valor R$`)
+                    VALUES (%s, %s, %s, %s)
+                """
+                cursor.execute(insert_query, (
+                    str(st.session_state.get('data_inicio')),
+                    st.session_state['pacotes_grossa_editado'],
+                    st.session_state['pacotes_fina_editado'],
+                    st.session_state['valor_total_editado']
+                ))
+                conn.commit()
+                st.success(f"Dados inseridos na tabela 'pedidos'. Valor total: R$ {st.session_state['valor_total_editado']:.2f}")
+
+                # Limpar sessão
+                for key in ['resultados', 'total_grossa', 'total_fina', 'valor_total',
+                            'data_inicio', 'tipo_pao_grossa', 'tipo_pao_fina',
+                            'valor_pacote', 'valor_total_editado',
+                            'pacotes_grossa_editado', 'pacotes_fina_editado']:
+                    if key in st.session_state:
+                        del st.session_state[key]
 
     cursor.close()
 
@@ -129,10 +154,10 @@ def inserir_pedidos_manual(conn):
     tipo_pao_grossa = st.selectbox("Qual tipo de grossa?", options=["G3", "G4"])
     tipo_pao_fina = st.selectbox("Qual tipo de fina?", options=["F3", "F4"])
 
-    qtde_telas_grossa = st.number_input(f"Quantas telas de Grossa {tipo_pao_grossa}?", min_value=0, step=1)
-    qtde_telas_fina = st.number_input(f"Quantas telas de Fina {tipo_pao_fina}?", min_value=0, step=1)
+    qtde_telas_grossa = st.number_input(f"Quantas telas de Grossa {tipo_pao_grossa}?", min_value=0, step=1, key="qtde_grossa_manual")
+    qtde_telas_fina = st.number_input(f"Quantas telas de Fina {tipo_pao_fina}?", min_value=0, step=1, key="qtde_fina_manual")
 
-    if st.button("Calcular previsão e mostrar resultados"):
+    if st.button("Calcular previsão e mostrar resultados", key="calcular_manual"):
         pacotes_grossa = calcular_pacotes(qtde_telas_grossa, tipo_pao_grossa)
         pacotes_fina = calcular_pacotes(qtde_telas_fina, tipo_pao_fina)
 
@@ -151,29 +176,97 @@ def inserir_pedidos_manual(conn):
         valor_total = (pacotes_grossa + pacotes_fina) * valor_pacote
         st.write(f"**Valor total estimado:** R$ {valor_total:.2f}")
 
-        st.session_state['inserir_valores'] = {
-            "data": str(data),
+        # Salva no session_state para edição posterior
+        st.session_state['resultados_manual'] = {
             "pacotes_grossa": pacotes_grossa,
             "pacotes_fina": pacotes_fina,
             "valor_total": valor_total,
-            "valor_pacote": valor_pacote
+            "valor_pacote": valor_pacote,
+            "data": str(data),
+            "tipo_pao_grossa": tipo_pao_grossa,
+            "tipo_pao_fina": tipo_pao_fina
         }
 
-    if 'inserir_valores' in st.session_state:
-        inserir = st.radio("Deseja inserir esses dados na tabela 'pedidos'?", ("Não", "Sim"), key="inserir_radio")
-        if inserir == "Sim":
-            try:
-                vals = st.session_state['inserir_valores']
-                insert_query = """
-                    INSERT INTO pedidos (Data, `Grossa (PCT)`, `Fina (PCT)`, `Valor R$`)
-                    VALUES (%s, %s, %s, %s)
-                """
-                cursor.execute(insert_query, (vals["data"], vals["pacotes_grossa"], vals["pacotes_fina"], vals["valor_total"]))
-                conn.commit()
-                st.success(f"Dados inseridos na tabela 'pedidos'. Valor total: R$ {vals['valor_total']:.2f}")
-                del st.session_state['inserir_valores']
-            except Exception as e:
-                st.error(f"Erro ao inserir no banco: {e}")
+    if 'resultados_manual' in st.session_state:
+        st.markdown("### Editar previsão total de pacotes")
+
+        total_grossa_editado = st.number_input(
+            f"Editar total de pacotes GROSSA ({st.session_state['resultados_manual']['tipo_pao_grossa']})",
+            value=st.session_state['resultados_manual']['pacotes_grossa'],
+            min_value=0,
+            step=1,
+            key="input_total_grossa_manual"
+        )
+
+        total_fina_editado = st.number_input(
+            f"Editar total de pacotes FINA ({st.session_state['resultados_manual']['tipo_pao_fina']})",
+            value=st.session_state['resultados_manual']['pacotes_fina'],
+            min_value=0,
+            step=1,
+            key="input_total_fina_manual"
+        )
+
+        if st.button("Recalcular valor total", key="recalcular_manual"):
+            novo_valor_total = (total_grossa_editado + total_fina_editado) * st.session_state['resultados_manual']['valor_pacote']
+            st.session_state['resultados_manual']['valor_total_editado'] = novo_valor_total
+            st.session_state['resultados_manual']['pacotes_grossa_editado'] = total_grossa_editado
+            st.session_state['resultados_manual']['pacotes_fina_editado'] = total_fina_editado
+
+        if 'valor_total_editado' in st.session_state['resultados_manual']:
+            st.write(f"**Novo valor total estimado:** R$ {st.session_state['resultados_manual']['valor_total_editado']:.2f}")
+
+            inserir = st.radio("Deseja inserir esses dados na tabela 'pedidos'?", ("Não", "Sim"), key="inserir_radio_manual")
+            if inserir == "Sim":
+                try:
+                    vals = st.session_state['resultados_manual']
+                    insert_query = """
+                        INSERT INTO pedidos (Data, `Grossa (PCT)`, `Fina (PCT)`, `Valor R$`)
+                        VALUES (%s, %s, %s, %s)
+                    """
+                    cursor.execute(insert_query, (
+                        vals["data"],
+                        vals.get('pacotes_grossa_editado', vals['pacotes_grossa']),
+                        vals.get('pacotes_fina_editado', vals['pacotes_fina']),
+                        vals['valor_total_editado']
+                    ))
+                    conn.commit()
+                    st.success(f"Dados inseridos na tabela 'pedidos'. Valor total: R$ {vals['valor_total_editado']:.2f}")
+
+                    # Limpar sessão após inserção
+                    del st.session_state['resultados_manual']
+                except Exception as e:
+                    st.error(f"Erro ao inserir no banco: {e}")
 
     cursor.close()
 
+def pagina_previsao_pedidos(conn):
+    st.markdown("<h2 style='font-weight:bold; font-size:28px;'>Escolha o modo de previsão:</h2>", unsafe_allow_html=True)
+
+    if 'modo_previsao' not in st.session_state:
+        st.session_state['modo_previsao'] = None
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Manual"):
+            st.session_state['modo_previsao'] = "manual"
+            st.rerun()
+    with col2:
+        if st.button("Automática"):
+            st.session_state['modo_previsao'] = "automatica"
+            st.rerun()
+
+    if st.session_state['modo_previsao'] == "manual":
+        st.write("---")
+        st.markdown("### Previsão Manual")
+        inserir_pedidos_manual(conn)
+        if st.button("Voltar à escolha"):
+            st.session_state['modo_previsao'] = None
+            st.rerun()
+
+    elif st.session_state['modo_previsao'] == "automatica":
+        st.write("---")
+        st.markdown("### Previsão Automática")
+        inserir_pedidos_automatizado(conn)
+        if st.button("Voltar à escolha"):
+            st.session_state['modo_previsao'] = None
+            st.rerun()

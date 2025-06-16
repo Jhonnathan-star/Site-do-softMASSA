@@ -16,7 +16,7 @@ from database.connection import conectar
 from modules.login import main as login_main, marcar_token_expirado
 from modules.processa_turno import inserir_horarios_separados_front, buscar_historico_por_data
 from modules.predicao import criar_predicao_semana
-from modules.pedidos import inserir_pedidos_automatizado, inserir_pedidos_manual
+from modules.pedidos import pagina_previsao_pedidos
 from components.ver_conta_funcionario import ver_conta_funcionario
 from modules.cadastrar import gerenciar_usuarios
 from streamlit_cookies_manager import EncryptedCookieManager
@@ -97,8 +97,7 @@ if st.session_state.menu_visivel:
                 "Registrar horários",
                 "Histórico por data",
                 "Predição semanal com IA",
-                "Previsão manual de pedidos",
-                "Previsão automática de pedidos",
+                "Previsão de pedidos",
                 "Ver conta do funcionário",
                 "Gerenciar usuários"
             ]
@@ -138,11 +137,8 @@ elif pagina == "Histórico por data":
 elif pagina == "Predição semanal com IA":
     executar_pagina(criar_predicao_semana)
 
-elif pagina == "Previsão manual de pedidos":
-    executar_pagina(inserir_pedidos_manual)
-
-elif pagina == "Previsão automática de pedidos":
-    executar_pagina(inserir_pedidos_automatizado)
+elif pagina == "Previsão de pedidos":
+    executar_pagina(pagina_previsao_pedidos)
 
 elif pagina == "Ver conta do funcionário":
     executar_pagina(ver_conta_funcionario)
