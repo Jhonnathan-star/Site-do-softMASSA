@@ -3,20 +3,28 @@ from mysql.connector import Error
 from dotenv import load_dotenv
 import os
 
-# Carrega as variáveis do .env
 load_dotenv()
 
-def conectar():
+def get_port(env_var_name, default=3306):
+    port_str = os.getenv(env_var_name)
     try:
-        conn = mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_NAME")
-        )
+        return int(port_str)
+    except (TypeError, ValueError):
+        return default
+
+def conectar(config=None):
+    try:
+        if config is None:
+            config = {
+                "host": os.getenv("DB_HOST_PADARIA1"),
+                "port": get_port("DB_PORT_PADARIA1"),
+                "user": os.getenv("DB_USER_PADARIA1"),
+                "password": os.getenv("DB_PASSWORD_PADARIA1"),
+                "database": os.getenv("DB_NAME_PADARIA1"),
+            }
+        conn = mysql.connector.connect(**config)
         if conn.is_connected():
-            print("Conexão bem-sucedida ao banco de dados")
+            print(f"Conectado ao banco {config['database']}")
             return conn
     except Error as e:
         print(f"Erro ao conectar: {e}")
