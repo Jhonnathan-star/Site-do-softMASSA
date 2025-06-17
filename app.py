@@ -1,16 +1,6 @@
 import streamlit as st
-
 # --- Configuração da página ---
 st.set_page_config(page_title="softMASSA", layout="centered")
-
-# --- Verificar se é link de redefinição de senha ---
-query_params = st.query_params
-if "token" in query_params:
-    from modules.Reiniciar_Senha import mostrar_redefinir_senha
-    mostrar_redefinir_senha()
-    st.stop()
-
-# --- Imports restantes ---
 import os
 from database.connection import conectar
 from modules.login import main as login_main, marcar_token_expirado
@@ -21,6 +11,13 @@ from components.ver_conta_funcionario import ver_conta_funcionario
 from modules.cadastrar import gerenciar_usuarios
 from streamlit_cookies_manager import EncryptedCookieManager
 from modules.gerenciar import gerenciar_telas  # Import da função combinada
+
+# --- Verificar se é link de redefinição de senha ---
+query_params = st.query_params
+if "token" in query_params:
+    from modules.Reiniciar_Senha import mostrar_redefinir_senha
+    mostrar_redefinir_senha()
+    st.stop()
 
 # --- Inicialização de Cookies ---
 cookie_password = os.getenv("COOKIE_PASSWORD")
@@ -40,9 +37,13 @@ st.session_state.setdefault("usuario_tipo", "comum")
 if "menu_visivel" not in st.session_state:
     st.session_state.menu_visivel = False  # começa escondido
 
-# --- Função utilitária para conectar e executar ---
+# --- Função utilitária para conectar e executar, usando banco da sessão ---
 def executar_pagina(funcao):
-    conn = conectar()
+    banco_config = st.session_state.get('banco_config')
+    if banco_config is None:
+        st.error("❌ Banco do usuário não definido na sessão.")
+        return
+    conn = conectar(banco_config)
     if not conn:
         st.error("❌ Não foi possível conectar ao banco de dados.")
         return
@@ -54,29 +55,23 @@ def executar_pagina(funcao):
 # --- Logout ---
 def logout():
     if 'token' in st.session_state:
-        conn = conectar()
-        if conn:
-            try:
-                marcar_token_expirado(st.session_state['token'], conn)
-            finally:
-                conn.close()
+        banco_config = st.session_state.get('banco_config')
+        if banco_config:
+            conn = conectar(banco_config)
+            if conn:
+                try:
+                    marcar_token_expirado(st.session_state['token'], conn)
+                finally:
+                    conn.close()
     cookies["session_token"] = ""
     cookies.save()
     st.session_state.clear()
     st.rerun()
 
 # --- Autenticação ---
-conn = conectar()
-if not conn:
-    st.error("❌ Erro ao conectar ao banco de dados.")
-    st.stop()
-
 if not st.session_state["logado"]:
     login_main(cookies)
-    conn.close()
     st.stop()
-
-conn.close()
 
 # --- Botão para mostrar/ocultar menu ---
 col1, col2 = st.columns([1, 9])
