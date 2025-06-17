@@ -201,8 +201,6 @@ def checar_sessao(cookies):
 
     token = cookies.get("session_token")
     if token:
-        # Como o token está relacionado a um usuário em um banco específico, 
-        # precisamos tentar validar o token nos dois bancos:
         for banco in [db_config_padaria1, db_config_padaria2]:
             conn = conectar(banco)
             if not conn:
@@ -210,15 +208,27 @@ def checar_sessao(cookies):
             usuario_id = validar_token(token, conn)
             conn.close()
             if usuario_id:
-                st.session_state['logado'] = True
-                st.session_state['usuario_id'] = usuario_id
-                st.session_state['usuario'] = obter_nome_usuario_por_id(usuario_id, conectar(banco))
-                st.session_state['usuario_tipo'] = "comum"  # Ou buscar no banco se quiser
-                st.session_state['token'] = token
-                st.session_state['banco_config'] = banco
-                return
+                # Reabrir conexão para buscar usuário e tipo
+                conn2 = conectar(banco)
+                if not conn2:
+                    continue
+                cursor = conn2.cursor()
+                cursor.execute("SELECT usuario, tipo FROM usuarios WHERE id = %s", (usuario_id,))
+                resultado = cursor.fetchone()
+                cursor.close()
+                conn2.close()
 
-        # Se não achou token válido em nenhum banco:
+                if resultado:
+                    nome_usuario, tipo_usuario = resultado
+                    st.session_state['logado'] = True
+                    st.session_state['usuario_id'] = usuario_id
+                    st.session_state['usuario'] = nome_usuario
+                    st.session_state['usuario_tipo'] = tipo_usuario
+                    st.session_state['token'] = token
+                    st.session_state['banco_config'] = banco
+                    return
+
+        # Token inválido
         cookies["session_token"] = ""
         cookies.save()
 
