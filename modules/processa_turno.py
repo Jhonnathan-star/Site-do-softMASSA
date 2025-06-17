@@ -44,10 +44,7 @@ def buscar_historico_por_data(conn):
                 mostrar_historico_para_datas(conn, datas)
 
 def is_feriado(data):
-    # 📝 Exemplo simples: substitua isso por sua lógica real (ex: consulta no banco, lista, API)
-    feriados = ["2025-06-12", "2025-09-07"]  # coloque as datas de feriados aqui no formato "YYYY-MM-DD"
-    return str(data) in feriados
-
+    return False
 
 def mostrar_historico_para_datas(conn, datas):
     cursor = conn.cursor()
