@@ -10,7 +10,8 @@ from modules.pedidos import pagina_previsao_pedidos
 from components.ver_conta_funcionario import ver_conta_funcionario
 from modules.cadastrar import gerenciar_usuarios
 from streamlit_cookies_manager import EncryptedCookieManager
-from modules.gerenciar import gerenciar_telas  # Import da função combinada
+from modules.gerenciar import gerenciar_telas 
+from modules.producao import main as producao_main
 
 # --- Verificar se é link de redefinição de senha ---
 query_params = st.query_params
@@ -94,7 +95,8 @@ if st.session_state.menu_visivel:
                 "Predição semanal com IA",
                 "Previsão de pedidos",
                 "Ver conta do funcionário",
-                "Gerenciar usuários"
+                "Gerenciar usuários",
+                "Produção e Lucro"
             ]
         else:
             opcoes = [
@@ -140,3 +142,7 @@ elif pagina == "Ver conta do funcionário":
 
 elif pagina == "Gerenciar usuários":
     executar_pagina(gerenciar_usuarios)
+
+elif pagina == "Produção e Lucro":
+    producao_main()
+
